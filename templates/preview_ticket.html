@@ -1,0 +1,110 @@
+{% extends "base.html" %}
+
+{% block title %}Preview Ticket - AI Ticket System{% endblock %}
+
+{% block content %}
+<div style="max-width: 900px; margin: 0 auto;">
+    <div class="tickets-section">
+        <h1 style="text-align: center; margin-bottom: 2.5rem; font-size: 2rem;">🤖 AI Generated Ticket Preview</h1>
+        
+        <div class="preview-field" style="margin-bottom: 1.75rem;">
+            <label style="font-weight: 600; color: var(--primary); font-size: 1rem; margin-bottom: 0.5rem;">📌 Title</label>
+            <div style="padding: 1rem; background: var(--light); border-radius: 10px; border-left: 4px solid var(--primary);">{{ ticket.title }}</div>
+        </div>
+
+        <div class="preview-field" style="margin-bottom: 1.75rem;">
+            <label style="font-weight: 600; color: var(--primary); font-size: 1rem; margin-bottom: 0.5rem;">📝 Description</label>
+            <div style="padding: 1rem; background: var(--light); border-radius: 10px; border-left: 4px solid var(--primary); line-height: 1.6;">{{ ticket.description }}</div>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; margin-bottom: 1.75rem;">
+            <div class="preview-field">
+                <label style="font-weight: 600; color: var(--primary); font-size: 1rem; margin-bottom: 0.5rem;">📊 Category</label>
+                <div style="padding: 1rem; background: var(--light); border-radius: 10px; border-left: 4px solid var(--primary);">
+                    <span class="category-badge">{{ ticket.category }}</span>
+                </div>
+            </div>
+
+            <div class="preview-field">
+                <label style="font-weight: 600; color: var(--primary); font-size: 1rem; margin-bottom: 0.5rem;">⚡ Priority</label>
+                <div style="padding: 1rem; background: var(--light); border-radius: 10px; border-left: 4px solid var(--primary);">
+                    <span class="priority-badge priority-{{ ticket.priority|lower }}">
+                        {{ ticket.priority }}
+                    </span>
+                </div>
+            </div>
+        </div>
+
+        {% if ticket.entities %}
+        <div class="preview-entities" style="background: linear-gradient(135deg, rgba(99, 102, 241, 0.05) 0%, rgba(99, 102, 241, 0.02) 100%); padding: 1.5rem; border-radius: 12px; border: 2px solid rgba(99, 102, 241, 0.1); margin-bottom: 1.75rem;">
+            <h3 style="margin-bottom: 1rem; color: var(--primary); font-weight: 700;">🔍 Extracted Information</h3>
+            
+            {% if ticket.entities.error_codes %}
+            <div style="margin-bottom: 1.25rem;">
+                <strong style="color: var(--dark);">Error Codes:</strong>
+                <div style="margin-top: 0.5rem; display: flex; flex-wrap: wrap; gap: 0.5rem;">
+                    {% for code in ticket.entities.error_codes %}
+                    <span class="entity-tag" style="background: #dbeafe; color: #0369a1; padding: 0.4rem 0.8rem; border-radius: 20px; font-size: 0.85rem; font-weight: 500;">{{ code }}</span>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endif %}
+
+            {% if ticket.entities.organizations %}
+            <div style="margin-bottom: 1.25rem;">
+                <strong style="color: var(--dark);">Organizations:</strong>
+                <div style="margin-top: 0.5rem; display: flex; flex-wrap: wrap; gap: 0.5rem;">
+                    {% for org in ticket.entities.organizations %}
+                    <span class="entity-tag" style="background: #fce7f3; color: #831843; padding: 0.4rem 0.8rem; border-radius: 20px; font-size: 0.85rem; font-weight: 500;">{{ org }}</span>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endif %}
+
+            {% if ticket.entities.amounts %}
+            <div style="margin-bottom: 1.25rem;">
+                <strong style="color: var(--dark);">Amounts:</strong>
+                <div style="margin-top: 0.5rem; display: flex; flex-wrap: wrap; gap: 0.5rem;">
+                    {% for amount in ticket.entities.amounts %}
+                    <span class="entity-tag" style="background: #fef3c7; color: #92400e; padding: 0.4rem 0.8rem; border-radius: 20px; font-size: 0.85rem; font-weight: 500;">{{ amount }}</span>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endif %}
+
+            {% if ticket.entities.products %}
+            <div style="margin-bottom: 0;">
+                <strong style="color: var(--dark);">Products/Services:</strong>
+                <div style="margin-top: 0.5rem; display: flex; flex-wrap: wrap; gap: 0.5rem;">
+                    {% for product in ticket.entities.products %}
+                    <span class="entity-tag" style="background: #dcfce7; color: #166534; padding: 0.4rem 0.8rem; border-radius: 20px; font-size: 0.85rem; font-weight: 500;">{{ product }}</span>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endif %}
+        </div>
+        {% endif %}
+
+        <div style="display: flex; gap: 1rem; margin-top: 2.5rem;">
+            <form method="POST" action="{{ url_for('confirm_ticket') }}" style="flex: 1;">
+                <input type="hidden" name="title" value="{{ ticket.title }}">
+                <input type="hidden" name="description" value="{{ ticket.description }}">
+                <input type="hidden" name="category" value="{{ ticket.category }}">
+                <input type="hidden" name="priority" value="{{ ticket.priority }}">
+                <button type="submit" class="btn btn-primary" style="width: 100%; padding: 1rem;">✅ Confirm & Create Ticket</button>
+            </form>
+            
+            <a href="{{ url_for('show_create_ticket') }}" class="btn btn-secondary" style="flex: 1; text-align: center; padding: 1rem;">↩️ Edit Description</a>
+        </div>
+
+        {% if ticket.ml_used %}
+        <p style="text-align: center; margin-top: 1.5rem; color: var(--success); font-weight: 600;">
+            ✓ Generated using ML model
+        </p>
+        {% else %}
+        <p style="text-align: center; margin-top: 1.5rem; color: var(--warning); font-weight: 600;">
+        ⚠️ Generated using rule-based system (ML models not loaded)
+    </p>
+    {% endif %}
+</div>
+{% endblock %}
