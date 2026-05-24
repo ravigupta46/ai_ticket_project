@@ -2,8 +2,5 @@ services:
   - type: web
     name: ai-ticket-project
     runtime: python-3.11
-    buildCommand: ./build.sh
+    buildCommand: apt-get update && apt-get install -y build-essential && pip install --upgrade pip setuptools wheel && pip install -r requirements.txt
     startCommand: gunicorn app:app
-    envVars:
-      - key: PYTHON_VERSION
-        value: 3.11
