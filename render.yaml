@@ -1,0 +1,9 @@
+services:
+  - type: web
+    name: ai-ticket-project
+    runtime: python-3.11
+    buildCommand: ./build.sh
+    startCommand: gunicorn app:app
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11
