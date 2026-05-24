@@ -1,0 +1,103 @@
+{% extends "base.html" %}
+
+{% block title %}Ticket #{{ ticket[0] }} Details{% endblock %}
+
+{% block content %}
+<div style="max-width: 900px; margin: 0 auto;">
+    <div class="tickets-section">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem; flex-wrap: wrap; gap: 1rem;">
+            <h1 style="font-size: 2rem;">🎫 Ticket #{{ ticket[0] }}</h1>
+            <span class="status-badge status-{{ ticket[6]|lower|replace(' ', '-') }}">
+                {{ ticket[6] }}
+            </span>
+        </div>
+
+        <div class="preview-field" style="margin-bottom: 1.75rem;">
+            <label style="font-weight: 600; color: var(--primary); font-size: 1rem; margin-bottom: 0.5rem;">📌 Title</label>
+            <div style="padding: 1rem; background: var(--light); border-radius: 10px; border-left: 4px solid var(--primary);">{{ ticket[2] }}</div>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; margin-bottom: 1.75rem;">
+            <div class="preview-field">
+                <label style="font-weight: 600; color: var(--primary); font-size: 1rem; margin-bottom: 0.5rem;">👤 Created By</label>
+                <div style="padding: 1rem; background: var(--light); border-radius: 10px; border-left: 4px solid var(--primary);">{{ ticket[1] }}</div>
+            </div>
+
+            <div class="preview-field">
+                <label style="font-weight: 600; color: var(--primary); font-size: 1rem; margin-bottom: 0.5rem;">📅 Created Date</label>
+                <div style="padding: 1rem; background: var(--light); border-radius: 10px; border-left: 4px solid var(--primary);">{{ ticket[7] if ticket[7] else 'N/A' }}</div>
+            </div>
+        </div>
+
+        <div class="preview-field" style="margin-bottom: 1.75rem;">
+            <label style="font-weight: 600; color: var(--primary); font-size: 1rem; margin-bottom: 0.5rem;">📝 Description</label>
+            <div style="padding: 1rem; background: var(--light); border-radius: 10px; border-left: 4px solid var(--primary); line-height: 1.6; white-space: pre-line;">{{ ticket[3] }}</div>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; margin-bottom: 1.75rem;">
+            <div class="preview-field">
+                <label style="font-weight: 600; color: var(--primary); font-size: 1rem; margin-bottom: 0.5rem;">📊 Category</label>
+                <div style="padding: 1rem; background: var(--light); border-radius: 10px; border-left: 4px solid var(--primary);">
+                    <span class="category-badge">{{ ticket[4] }}</span>
+                </div>
+            </div>
+
+            <div class="preview-field">
+                <label style="font-weight: 600; color: var(--primary); font-size: 1rem; margin-bottom: 0.5rem;">⚡ Priority</label>
+                <div style="padding: 1rem; background: var(--light); border-radius: 10px; border-left: 4px solid var(--primary);">
+                    <span class="priority-badge priority-{{ ticket[5]|lower }}">
+                        {{ ticket[5] }}
+                    </span>
+                </div>
+            </div>
+        </div>
+
+        {% if session.get('role') == 'agent' %}
+        <div class="preview-field" style="margin-bottom: 1.75rem;">
+            <label style="font-weight: 600; color: var(--primary); font-size: 1rem; margin-bottom: 0.5rem;">🔄 Update Status</label>
+            <div style="padding: 1rem; background: linear-gradient(135deg, rgba(99, 102, 241, 0.05) 0%, rgba(99, 102, 241, 0.02) 100%); border-radius: 10px; border: 2px solid rgba(99, 102, 241, 0.1);">
+                <select id="statusSelect" style="padding: 0.75rem; border: 2px solid var(--border); border-radius: 8px; font-size: 1rem; background: white; font-weight: 500; cursor: pointer; width: 250px; transition: all 0.3s ease;" onchange="updateStatus({{ ticket[0] }}, this.value)">
+                    <option value="Open" {% if ticket[6] == 'Open' %}selected{% endif %}>Open</option>
+                    <option value="In Progress" {% if ticket[6] == 'In Progress' %}selected{% endif %}>In Progress</option>
+                    <option value="Resolved" {% if ticket[6] == 'Resolved' %}selected{% endif %}>Resolved</option>
+                </select>
+            </div>
+        </div>
+        {% endif %}
+
+    <div style="display: flex; gap: 1rem; margin-top: 2rem;">
+        <button onclick="copyToClipboard('Ticket #{{ ticket[0] }}: {{ ticket[2] }}')" class="btn btn-secondary">
+            📋 Copy Details
+        </button>
+        
+        {% if session.get('role') == 'user' and ticket[1] == session.get('username') %}
+        <!-- Users can only view their own tickets -->
+        {% endif %}
+        
+        <a href="javascript:history.back()" class="btn btn-secondary" style="margin-left: auto;">
+            ← Back
+        </a>
+    </div>
+</div>
+
+<script>
+function updateStatus(ticketId, newStatus) {
+    fetch(`/update_ticket_status/${ticketId}`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ status: newStatus })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            showNotification('Status updated successfully!', 'success');
+        }
+    })
+    .catch(error => {
+        showNotification('Error updating status', 'error');
+    });
+}
+</script>
+{% endblock %}

@@ -1,0 +1,78 @@
+{% extends 'base.html' %}
+
+{% block title %}Welcome — AI Ticket System{% endblock %}
+
+{% block content %}
+<section class="hero">
+  <div class="hero-inner">
+    <div class="hero-copy">
+      <h1 class="hero-title">Support, automated and simplified</h1>
+      <p class="hero-sub">AI-powered ticket classification, priority prediction, and streamlined workflows — built for fast-moving support teams.</p>
+
+      <div class="hero-ctas">
+        <a href="{{ url_for('register') }}" class="btn btn-primary">Get Started — Free</a>
+        <a href="{{ url_for('login') }}" class="btn btn-outline">Sign In</a>
+      </div>
+
+      <ul class="trust-list">
+        <li>⚡ Fast ticket triage</li>
+        <li>🤖 Smart category & priority</li>
+        <li>📈 Built-in model metrics</li>
+      </ul>
+    </div>
+
+    <div class="hero-preview">
+      <div class="card status-card">
+        <div class="card-header">ML Models Status</div>
+        <div class="card-body">
+          <div class="status-row"><strong>Category Accuracy</strong><span>89.95%</span></div>
+          <div class="status-row"><strong>Priority Model</strong><span>Loaded</span></div>
+          <div class="status-row"><strong>Entity Extraction</strong><span>spaCy ready</span></div>
+        </div>
+      </div>
+
+      <div class="card preview-ticket">
+        <div class="card-header">Example Ticket</div>
+        <div class="card-body">
+          <h4>Unable to access account dashboard</h4>
+          <p class="muted">Customer reports a 500 error when opening the dashboard page. Please investigate login flow and server logs.</p>
+
+          <div class="ticket-meta">
+            <span class="chip">Category: Other</span>
+            <span class="chip">Priority: Low</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="features">
+  <h2>Why teams choose AI Ticket System</h2>
+  <div class="feature-grid">
+    <div class="feature">
+      <h3>Automated Triage</h3>
+      <p>Let the models tag and prioritize tickets so agents can focus on solving problems.</p>
+    </div>
+    <div class="feature">
+      <h3>Agent Workflows</h3>
+      <p>Built-in dashboards and status updates keep teams coordinated and responsive.</p>
+    </div>
+    <div class="feature">
+      <h3>Lightweight & Fast</h3>
+      <p>Runs locally with SQLite and simple dependencies — great for prototypes and internal tools.</p>
+    </div>
+  </div>
+</section>
+
+<section class="cta-band">
+  <div class="cta-inner">
+    <h3>Ready to try it?</h3>
+    <a href="{{ url_for('register') }}" class="btn btn-primary large">Create your account — free</a>
+  </div>
+</section>
+
+<footer class="site-footer">
+  <div>© {{ current_year }} AI Ticket System • Built with Flask</div>
+</footer>
+{% endblock %}

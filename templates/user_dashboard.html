@@ -1,0 +1,131 @@
+{% extends "base.html" %}
+
+{% block title %}User Dashboard - AI Ticket System{% endblock %}
+
+{% block content %}
+<div class="dashboard-header">
+    <h1>Welcome, {{ session.get('username') }}! 👋</h1>
+    <p>Here's your AI-powered ticket dashboard</p>
+</div>
+
+<!-- Accuracy Stats -->
+<div class="accuracy-cards">
+    <div class="accuracy-card">
+        <div class="stat-icon">🎯</div>
+        <div class="accuracy-value">{{ "%.2f"|format(classification_accuracy) }}%</div>
+        <div class="accuracy-label">Category Accuracy</div>
+        <div class="progress-bar">
+            <div class="progress-fill" style="width: {{ classification_accuracy }}%"></div>
+        </div>
+        <p class="stat-description">Hardware • Network • Access • Other</p>
+    </div>
+
+    <div class="accuracy-card">
+        <div class="stat-icon">⚡</div>
+        <div class="accuracy-value">{{ "%.2f"|format(priority_accuracy) }}%</div>
+        <div class="accuracy-label">Priority Accuracy</div>
+        <div class="progress-bar">
+            <div class="progress-fill" style="width: {{ priority_accuracy }}%"></div>
+        </div>
+        <p class="stat-description">High • Medium • Low</p>
+    </div>
+
+    <div class="accuracy-card">
+        <div class="stat-icon">📊</div>
+        <div class="accuracy-value">{{ training_count }}</div>
+        <div class="accuracy-label">Tickets Processed</div>
+        <p class="stat-description">AI-trained on real data</p>
+    </div>
+</div>
+
+<!-- Quick Actions -->
+<div class="stats-container">
+    <div class="stat-card">
+        <div class="stat-icon">🎫</div>
+        <div class="stat-value">{{ tickets|length }}</div>
+        <div class="stat-label">Your Tickets</div>
+        <a href="{{ url_for('show_create_ticket') }}" class="btn btn-primary" style="margin-top: 1rem;">Create New Ticket</a>
+    </div>
+
+    <div class="stat-card">
+        <div class="stat-icon">✅</div>
+        <div class="stat-value">{{ tickets|selectattr('5', 'equalto', 'Resolved')|list|length }}</div>
+        <div class="stat-label">Resolved</div>
+    </div>
+
+    <div class="stat-card">
+        <div class="stat-icon">⏳</div>
+        <div class="stat-value">{{ tickets|selectattr('5', 'equalto', 'Open')|list|length }}</div>
+        <div class="stat-label">Open Tickets</div>
+    </div>
+</div>
+
+<!-- Recent Tickets -->
+<div class="tickets-section">
+    <h2 class="section-title">📋 Your Recent Tickets</h2>
+    
+    {% if tickets %}
+    <div style="margin-bottom: 1rem;">
+        <input type="text" id="searchTickets" placeholder="Search tickets..." class="form-group" style="padding: 0.8rem; width: 100%;" onkeyup="searchTickets(this.value)">
+    </div>
+    
+    <table class="ticket-table">
+        <thead>
+            <tr>
+                <th>ID</th>
+                <th>Title</th>
+                <th>Category</th>
+                <th>Priority</th>
+                <th>Status</th>
+                <th>Created</th>
+                <th>Action</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for ticket in tickets %}
+            <tr class="ticket-row">
+                <td>#{{ ticket[0] }}</td>
+                <td>{{ ticket[2] }}</td>
+                <td>{{ ticket[4] }}</td>
+                <td>
+                    <span class="priority-badge priority-{{ ticket[5]|lower }}">
+                        {{ ticket[5] }}
+                    </span>
+                </td>
+                <td>
+                    <span class="status-badge status-{{ ticket[6]|lower|replace(' ', '-') }}">
+                        {{ ticket[6] }}
+                    </span>
+                </td>
+                <td>{{ ticket[7][:10] if ticket[7] else 'N/A' }}</td>
+                <td>
+                    <a href="{{ url_for('view_ticket', ticket_id=ticket[0]) }}" class="btn btn-secondary" style="padding: 0.3rem 1rem;">View</a>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <div style="text-align: center; padding: 3rem;">
+        <p style="color: #999; font-size: 1.2rem;">No tickets yet. Create your first AI-powered ticket!</p>
+        <a href="{{ url_for('show_create_ticket') }}" class="btn btn-primary" style="margin-top: 1rem;">Create Ticket</a>
+    </div>
+    {% endif %}
+</div>
+
+<script>
+function searchTickets(value) {
+    const rows = document.querySelectorAll('.ticket-row');
+    value = value.toLowerCase();
+    
+    rows.forEach(row => {
+        const text = row.textContent.toLowerCase();
+        if (text.includes(value)) {
+            row.style.display = '';
+        } else {
+            row.style.display = 'none';
+        }
+    });
+}
+</script>
+{% endblock %}

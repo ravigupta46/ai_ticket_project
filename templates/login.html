@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+
+{% block title %}Login - AI Ticket System{% endblock %}
+
+{% block content %}
+<div class="auth-container">
+    <div class="auth-card">
+        <div class="auth-header">
+            <h1>Welcome Back! 👋</h1>
+            <p>Login to access your AI-powered ticket dashboard</p>
+        </div>
+
+        <form method="POST" class="auth-form" id="loginForm" onsubmit="return validateForm('loginForm')">
+            <div class="form-group">
+                <label for="username">Username</label>
+                <input type="text" id="username" name="username" placeholder="Enter your username" required>
+            </div>
+
+            <div class="form-group">
+                <label for="password">Password</label>
+                <input type="password" id="password" name="password" placeholder="Enter your password" required>
+            </div>
+
+            <button type="submit" class="auth-button">Sign In</button>
+        </form>
+
+        <div class="auth-footer">
+            <p>Don't have an account? <a href="{{ url_for('register') }}">Register here</a></p>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,189 @@
+{% extends "base.html" %}
+
+{% block title %}Agent Dashboard - AI Ticket System{% endblock %}
+
+{% block content %}
+<div class="dashboard-header">
+    <h1>Agent Dashboard 👨‍💻</h1>
+    <p>Manage and monitor all support tickets</p>
+</div>
+
+<!-- Overview Stats -->
+<div class="stats-container">
+    <div class="stat-card">
+        <div class="stat-icon">📊</div>
+        <div class="stat-value">{{ tickets|length }}</div>
+        <div class="stat-label">Total Tickets</div>
+    </div>
+
+    <div class="stat-card">
+        <div class="stat-icon">🟢</div>
+        <div class="stat-value">{{ tickets|selectattr('6', 'equalto', 'Open')|list|length }}</div>
+        <div class="stat-label">Open</div>
+    </div>
+
+    <div class="stat-card">
+        <div class="stat-icon">🟡</div>
+        <div class="stat-value">{{ tickets|selectattr('6', 'equalto', 'In Progress')|list|length }}</div>
+        <div class="stat-label">In Progress</div>
+    </div>
+
+    <div class="stat-card">
+        <div class="stat-icon">✅</div>
+        <div class="stat-value">{{ tickets|selectattr('6', 'equalto', 'Resolved')|list|length }}</div>
+        <div class="stat-label">Resolved</div>
+    </div>
+</div>
+
+<!-- Priority Distribution -->
+<div class="accuracy-cards">
+    <div class="accuracy-card">
+        <div class="stat-icon">🔴</div>
+        <div class="accuracy-value">{{ tickets|selectattr('5', 'equalto', 'High')|list|length }}</div>
+        <div class="accuracy-label">High Priority</div>
+        <div class="progress-bar">
+            {% set high_count = tickets|selectattr('5', 'equalto', 'High')|list|length %}
+            {% set total = tickets|length if tickets|length > 0 else 1 %}
+            <div class="progress-fill" style="width: {{ (high_count / total * 100)|int }}%; background: #c62828;"></div>
+        </div>
+    </div>
+
+    <div class="accuracy-card">
+        <div class="stat-icon">🟡</div>
+        <div class="accuracy-value">{{ tickets|selectattr('5', 'equalto', 'Medium')|list|length }}</div>
+        <div class="accuracy-label">Medium Priority</div>
+        <div class="progress-bar">
+            {% set medium_count = tickets|selectattr('5', 'equalto', 'Medium')|list|length %}
+            <div class="progress-fill" style="width: {{ (medium_count / total * 100)|int }}%; background: #ef6c00;"></div>
+        </div>
+    </div>
+
+    <div class="accuracy-card">
+        <div class="stat-icon">🟢</div>
+        <div class="accuracy-value">{{ tickets|selectattr('5', 'equalto', 'Low')|list|length }}</div>
+        <div class="accuracy-label">Low Priority</div>
+        <div class="progress-bar">
+            {% set low_count = tickets|selectattr('5', 'equalto', 'Low')|list|length %}
+            <div class="progress-fill" style="width: {{ (low_count / total * 100)|int }}%; background: #2e7d32;"></div>
+        </div>
+    </div>
+</div>
+
+<!-- All Tickets -->
+<div class="tickets-section">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
+        <h2 class="section-title">📋 All Support Tickets</h2>
+        <div>
+            <button class="btn btn-secondary" onclick="exportTickets()" style="margin-right: 0.5rem;">📥 Export CSV</button>
+            <select id="priorityFilter" class="form-group" style="width: auto; display: inline-block;" onchange="filterTickets(this.value)">
+                <option value="all">All Priorities</option>
+                <option value="high">High</option>
+                <option value="medium">Medium</option>
+                <option value="low">Low</option>
+            </select>
+        </div>
+    </div>
+    
+    <div style="margin-bottom: 1rem;">
+        <input type="text" id="searchTickets" placeholder="Search tickets..." class="form-group" style="padding: 0.8rem; width: 100%;" onkeyup="searchTickets(this.value)">
+    </div>
+    
+    {% if tickets %}
+    <table class="ticket-table">
+        <thead>
+            <tr>
+                <th>ID</th>
+                <th>User</th>
+                <th>Title</th>
+                <th>Category</th>
+                <th>Priority</th>
+                <th>Status</th>
+                <th>Created</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for ticket in tickets %}
+            <tr class="ticket-row">
+                <td>#{{ ticket[0] }}</td>
+                <td>{{ ticket[1] }}</td>
+                <td>{{ ticket[2] }}</td>
+                <td>{{ ticket[4] }}</td>
+                <td>
+                    <span class="priority-badge priority-{{ ticket[5]|lower }}">
+                        {{ ticket[5] }}
+                    </span>
+                </td>
+                <td>
+                    <select class="status-select" data-ticket-id="{{ ticket[0] }}" onchange="updateStatus(this)">
+                        <option value="Open" {% if ticket[6] == 'Open' %}selected{% endif %}>Open</option>
+                        <option value="In Progress" {% if ticket[6] == 'In Progress' %}selected{% endif %}>In Progress</option>
+                        <option value="Resolved" {% if ticket[6] == 'Resolved' %}selected{% endif %}>Resolved</option>
+                    </select>
+                </td>
+                <td>{{ ticket[7][:10] if ticket[7] else 'N/A' }}</td>
+                <td>
+                    <a href="{{ url_for('view_ticket', ticket_id=ticket[0]) }}" class="btn btn-secondary" style="padding: 0.3rem 1rem;">View</a>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <div style="text-align: center; padding: 3rem;">
+        <p style="color: #999; font-size: 1.2rem;">No tickets in the system yet.</p>
+    </div>
+    {% endif %}
+</div>
+
+<script>
+function filterTickets(priority) {
+    const rows = document.querySelectorAll('.ticket-row');
+    rows.forEach(row => {
+        const rowPriority = row.querySelector('.priority-badge')?.textContent.toLowerCase();
+        if (priority === 'all' || rowPriority === priority) {
+            row.style.display = '';
+        } else {
+            row.style.display = 'none';
+        }
+    });
+}
+
+function searchTickets(value) {
+    const rows = document.querySelectorAll('.ticket-row');
+    value = value.toLowerCase();
+    
+    rows.forEach(row => {
+        const text = row.textContent.toLowerCase();
+        if (text.includes(value)) {
+            row.style.display = '';
+        } else {
+            row.style.display = 'none';
+        }
+    });
+}
+
+function updateStatus(select) {
+    const ticketId = select.dataset.ticketId;
+    const newStatus = select.value;
+    
+    // You would typically make an AJAX call here to update the status
+    fetch(`/update_ticket_status/${ticketId}`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ status: newStatus })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            showNotification('Status updated successfully!', 'success');
+        }
+    })
+    .catch(error => {
+        showNotification('Error updating status', 'error');
+    });
+}
+</script>
+{% endblock %}

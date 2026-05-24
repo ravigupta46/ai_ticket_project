@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}AI Ticket System{% endblock %}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <!-- Navigation Bar -->
+    <nav class="navbar">
+        <div class="nav-container">
+            <div class="nav-logo">
+                <a href="/">
+                    <span class="logo-icon">🎫</span>
+                    <span class="logo-text">AI Ticket System</span>
+                </a>
+            </div>
+            
+            <div class="nav-menu">
+                {% if session.get('username') %}
+                    {% if session.get('role') == 'user' %}
+                        <a href="{{ url_for('user_dashboard') }}" class="nav-link">Dashboard</a>
+                        <a href="{{ url_for('show_create_ticket') }}" class="nav-link">New Ticket</a>
+                    {% elif session.get('role') == 'agent' %}
+                        <a href="{{ url_for('agent_dashboard') }}" class="nav-link">Dashboard</a>
+                        <a href="{{ url_for('agent_dashboard') }}" class="nav-link">All Tickets</a>
+                    {% endif %}
+                    
+                    <div class="nav-user">
+                        <span class="user-role">{{ session.get('role')|capitalize }}</span>
+                        <span class="user-name">{{ session.get('username') }}</span>
+                        <a href="{{ url_for('logout') }}" class="logout-btn">Logout</a>
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+    </nav>
+
+    <!-- Main Content -->
+    <main class="main-content">
+        {% block content %}{% endblock %}
+    </main>
+
+    <!-- Flash Messages -->
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+            <div class="flash-messages">
+                {% for category, message in messages %}
+                    <div class="flash-message flash-{{ category }}">
+                        {{ message }}
+                        <button class="flash-close" onclick="this.parentElement.remove()">×</button>
+                    </div>
+                {% endfor %}
+            </div>
+        {% endif %}
+    {% endwith %}
+
+    <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+</body>
+</html>

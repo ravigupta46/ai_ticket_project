@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+
+{% block title %}Create Ticket - AI Ticket System{% endblock %}
+
+{% block content %}
+<div style="max-width: 700px; margin: 0 auto;">
+    <div class="tickets-section">
+        <div style="text-align: center; margin-bottom: 2.5rem;">
+            <h1 style="font-size: 2rem; margin-bottom: 0.75rem;">🤖 Create AI-Powered Ticket</h1>
+            <p style="color: var(--text-light); font-size: 1.1rem;">Describe your issue in natural language and let AI handle the rest!</p>
+        </div>
+
+        <form method="POST" class="auth-form" id="ticketForm" onsubmit="return previewTicket()">
+            <div class="form-group">
+                <label for="description" style="font-size: 1rem;">📝 Describe Your Problem</label>
+                <textarea 
+                    id="description" 
+                    name="description" 
+                    placeholder="Example: My laptop won't turn on and shows error code 43. This is urgent as I have a deadline tomorrow."
+                    required
+                    style="padding: 1rem; min-height: 150px; border: 2px solid var(--border); border-radius: 10px; font-size: 1rem; font-family: inherit; transition: all 0.3s ease; background: var(--light);"
+                ></textarea>
+                <small style="color: var(--text-light); font-weight: 500;">💡 Tip: Be as descriptive as possible for better AI accuracy</small>
+            </div>
+
+            <div style="background: linear-gradient(135deg, rgba(99, 102, 241, 0.05) 0%, rgba(99, 102, 241, 0.02) 100%); padding: 1.5rem; border-radius: 12px; border: 2px solid rgba(99, 102, 241, 0.1); margin-bottom: 1.75rem;">
+                <label style="font-weight: 700; color: var(--primary); margin-bottom: 1rem; display: block;">✨ AI Will Automatically:</label>
+                <ul style="list-style: none; padding: 0; display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem;">
+                    <li style="margin: 0;">✅ Generate concise title</li>
+                    <li style="margin: 0;">✅ Categorize the issue</li>
+                    <li style="margin: 0;">✅ Set priority level</li>
+                    <li style="margin: 0;">✅ Extract key info</li>
+                </ul>
+            </div>
+
+            <button type="submit" class="btn btn-primary" style="width: 100%; padding: 1rem; font-size: 1.05rem;">
+                ⚡ Generate Ticket with AI
+            </button>
+        </form>
+    </div>
+
+    <!-- Example templates for users -->
+    <div style="margin-top: 2.5rem;">
+        <h3 style="margin-bottom: 1.5rem; font-size: 1.3rem; color: var(--dark);">📝 Example Descriptions:</h3>
+        <div style="display: grid; gap: 1.25rem;">
+            <div class="example-card" style="padding: 1.25rem; background: white; border-radius: 12px; cursor: pointer; border: 2px solid var(--border); transition: all 0.3s ease; box-shadow: var(--shadow-sm);" onclick="useExample(this)" onmouseover="this.style.borderColor='var(--primary)'; this.style.transform='translateY(-2px)'; this.style.boxShadow='var(--shadow-md)';" onmouseout="this.style.borderColor='var(--border)'; this.style.transform='translateY(0)'; this.style.boxShadow='var(--shadow-sm)';">
+                <div style="color: var(--text-light); font-weight: 500; margin-bottom: 0.5rem;">Hardware Issue</div>
+                <div style="color: var(--text);">My laptop screen is flickering and sometimes goes black. This started after the latest Windows update.</div>
+            </div>
+            <div class="example-card" style="padding: 1.25rem; background: white; border-radius: 12px; cursor: pointer; border: 2px solid var(--border); transition: all 0.3s ease; box-shadow: var(--shadow-sm);" onclick="useExample(this)" onmouseover="this.style.borderColor='var(--primary)'; this.style.transform='translateY(-2px)'; this.style.boxShadow='var(--shadow-md)';" onmouseout="this.style.borderColor='var(--border)'; this.style.transform='translateY(0)'; this.style.boxShadow='var(--shadow-sm)';">
+                <div style="color: var(--text-light); font-weight: 500; margin-bottom: 0.5rem;">Network Issue</div>
+                <div style="color: var(--text);">Cannot connect to company WiFi. Getting error 'Unable to connect to this network'. Other devices work fine.</div>
+            </div>
+            <div class="example-card" style="padding: 1.25rem; background: white; border-radius: 12px; cursor: pointer; border: 2px solid var(--border); transition: all 0.3s ease; box-shadow: var(--shadow-sm);" onclick="useExample(this)" onmouseover="this.style.borderColor='var(--primary)'; this.style.transform='translateY(-2px)'; this.style.boxShadow='var(--shadow-md)';" onmouseout="this.style.borderColor='var(--border)'; this.style.transform='translateY(0)'; this.style.boxShadow='var(--shadow-sm)';">
+                <div style="color: var(--text-light); font-weight: 500; margin-bottom: 0.5rem;">Urgent - Email Issue</div>
+                <div style="color: var(--text);">URGENT: Email not working on my phone. Can't send or receive emails since this morning. Need immediate help.</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function useExample(element) {
+    const text = element.querySelector('div:last-child').textContent;
+    document.getElementById('description').value = text;
+    document.getElementById('description').focus();
+}
+</script>
+{% endblock %}

@@ -1,0 +1,5 @@
+﻿C:\Users\ravig\OneDrive\Desktop\ai_ticket_project\data\tickets.csv - 702.86 MB
+C:\Users\ravig\OneDrive\Desktop\ai_ticket_project\model\priority_model.pkl - 29.95 MB
+C:\Users\ravig\OneDrive\Desktop\ai_ticket_project\model\output\cleaned_tickets.csv - 894.73 MB
+C:\Users\ravig\OneDrive\Desktop\ai_ticket_project\model\output\training_data.csv - 397.33 MB
+C:\Users\ravig\OneDrive\Desktop\ai_ticket_project\output\cleaned_tickets.csv - 775.95 MB

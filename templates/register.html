@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+
+{% block title %}Register - AI Ticket System{% endblock %}
+
+{% block content %}
+<div class="auth-container">
+    <div class="auth-card">
+        <div class="auth-header">
+            <h1>Create Account 📝</h1>
+            <p>Join our AI-powered ticket management system</p>
+        </div>
+
+        <form method="POST" class="auth-form" id="registerForm" onsubmit="return validateForm('registerForm')">
+            <div class="form-group">
+                <label for="username">Username</label>
+                <input type="text" id="username" name="username" placeholder="Choose a unique username" required>
+            </div>
+
+            <div class="form-group">
+                <label for="password">Password</label>
+                <input type="password" id="password" name="password" placeholder="Choose a strong password" required>
+            </div>
+
+            <div class="form-group">
+                <label for="role">Select Your Role</label>
+                <select id="role" name="role" required style="padding: 1rem; border: 2px solid var(--border); border-radius: 12px; font-size: 1rem; background: var(--light); transition: all 0.3s ease; cursor: pointer;">
+                    <option value="">-- Choose Your Role --</option>
+                    <option value="user">👤 User (Submit Tickets)</option>
+                    <option value="agent">👨‍💻 Support Agent (Manage Tickets)</option>
+                </select>
+            </div>
+
+            <button type="submit" class="auth-button" style="margin-top: 0.5rem;">Create Account</button>
+        </form>
+
+        <div class="auth-footer">
+            <p>Already have an account? <a href="{{ url_for('login') }}">Login here</a></p>
+        </div>
+    </div>
+</div>
+{% endblock %}
