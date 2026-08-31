@@ -1,94 +1,102 @@
-# ai_engine/ticket_generator.py (UPDATED with correct path)
-import pickle
+# ai_engine/ticket_generator.py
+import os
 import re
+import pickle
+import logging
 import spacy
 import numpy as np
-from sklearn.feature_extraction.text import TfidfVectorizer
-import os
-import logging
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-MODEL_PATH = os.path.join(BASE_DIR, 'model')  # Changed from 'models' to 'model'
+MODEL_DIR = os.path.join(BASE_DIR, 'model')
+
+CATEGORY_MAPPING = {
+    0: 'Bank Account services',
+    1: 'Credit card or prepaid card',
+    2: 'Others',
+    3: 'Theft/Dispute Reporting',
+    4: 'Mortgage/Loan',
+    '0': 'Bank Account services',
+    '1': 'Credit card or prepaid card',
+    '2': 'Others',
+    '3': 'Theft/Dispute Reporting',
+    '4': 'Mortgage/Loan',
+    'Bank Account services': 'Bank Account services',
+    'Credit card or prepaid card': 'Credit card or prepaid card',
+    'Theft/Dispute Reporting': 'Theft/Dispute Reporting',
+    'Mortgage/Loan': 'Mortgage/Loan',
+    'Others': 'Others'
+}
 
 class AITicketGenerator:
     def __init__(self):
         self.models_loaded = False
+        self.category_model = None
+        self.priority_model = None
+        self.vectorizer = None
+        self.priority_vectorizer = None
+        self.nlp = None
         self.load_models()
-        
+
     def load_models(self):
-        """Load trained models"""
+        """Load trained category and priority models & vectorizers"""
         try:
-            # Check if model directory exists
-            if not os.path.exists(MODEL_PATH):
-                logger.error(f"Model directory not found: {MODEL_PATH}")
-                return
-            
-            # Load category model
-            category_model_file = os.path.join(MODEL_PATH, 'category_model.pkl')
-            if os.path.exists(category_model_file):
+            category_model_file = os.path.join(MODEL_DIR, 'category_model.pkl')
+            vectorizer_file = os.path.join(MODEL_DIR, 'vectorizer.pkl')
+            priority_model_file = os.path.join(MODEL_DIR, 'priority_model.pkl')
+            priority_vectorizer_file = os.path.join(MODEL_DIR, 'priority_vectorizer.pkl')
+
+            # Load Category Model & Vectorizer
+            if os.path.exists(category_model_file) and os.path.exists(vectorizer_file):
                 with open(category_model_file, 'rb') as f:
                     self.category_model = pickle.load(f)
-                logger.info("✅ Category model loaded")
-            else:
-                logger.warning(f"Category model not found at {category_model_file}")
-                return
-            
-            # Load priority model
-            priority_model_file = os.path.join(MODEL_PATH, 'priority_model.pkl')
-            if os.path.exists(priority_model_file):
-                with open(priority_model_file, 'rb') as f:
-                    self.priority_model = pickle.load(f)
-                logger.info("✅ Priority model loaded")
-            else:
-                logger.warning(f"Priority model not found at {priority_model_file}")
-                return
-            
-            # Load vectorizer
-            vectorizer_file = os.path.join(MODEL_PATH, 'vectorizer.pkl')
-            if os.path.exists(vectorizer_file):
                 with open(vectorizer_file, 'rb') as f:
                     self.vectorizer = pickle.load(f)
-                logger.info("✅ Vectorizer loaded")
-            else:
-                logger.warning(f"Vectorizer not found at {vectorizer_file}")
-                return
-            
-            # Load spaCy for NER
+                logger.info("[OK] Category model & vectorizer loaded successfully")
+
+            # Load Priority Model & Vectorizer
+            if os.path.exists(priority_model_file) and os.path.exists(priority_vectorizer_file):
+                with open(priority_model_file, 'rb') as f:
+                    self.priority_model = pickle.load(f)
+                with open(priority_vectorizer_file, 'rb') as f:
+                    self.priority_vectorizer = pickle.load(f)
+                logger.info("[OK] Priority model loaded successfully")
+
+            # Load spaCy NLP Model
             try:
                 self.nlp = spacy.load("en_core_web_sm")
-                logger.info("✅ spaCy model loaded")
-            except:
-                logger.warning("spaCy model not found, downloading...")
+                logger.info("[OK] spaCy NER model loaded")
+            except Exception:
                 import subprocess
                 subprocess.run(["python", "-m", "spacy", "download", "en_core_web_sm"])
                 self.nlp = spacy.load("en_core_web_sm")
-            
-            self.models_loaded = True
-            logger.info("✅ All models loaded successfully from 'model' folder")
-            
+
+            if self.category_model is not None and self.vectorizer is not None:
+                self.models_loaded = True
+                logger.info("[OK] ML Ticket Generator initialized in ML mode")
+            else:
+                logger.warning("[WARN] ML models not found on disk. Operating in rule-based fallback mode")
+
         except Exception as e:
-            logger.error(f"Error loading models: {e}")
-            logger.warning("Falling back to rule-based system")
+            logger.error(f"[ERROR] Error loading models: {e}")
             self.models_loaded = False
-    
+
     def preprocess_text(self, text):
-        """Clean and preprocess text"""
+        """Clean and normalize input text"""
         if not text:
             return ""
-        
         text = str(text).lower()
-        # Remove special characters but keep important ones
-        text = re.sub(r'[^a-z0-9\s\.\-_$%]', ' ', text)
-        # Remove extra whitespace
+        text = re.sub(r'\[.*?\]', ' ', text)
+        text = re.sub(r'[^\w\s]', ' ', text)
+        text = re.sub(r'\w*\d\w*', ' ', text)
         text = re.sub(r'\s+', ' ', text).strip()
         return text
-    
+
     def extract_entities(self, text):
-        """Extract entities using NER and patterns"""
+        """Extract financial entities, organizations, money amounts, dates, and account/error codes"""
         entities = {
             'error_codes': [],
             'organizations': [],
@@ -96,9 +104,8 @@ class AITicketGenerator:
             'dates': [],
             'products': []
         }
-        
-        # If spaCy is loaded, use it
-        if hasattr(self, 'nlp'):
+
+        if self.nlp:
             doc = self.nlp(text)
             for ent in doc.ents:
                 if ent.label_ == 'ORG':
@@ -109,124 +116,116 @@ class AITicketGenerator:
                     entities['amounts'].append(ent.text)
                 elif ent.label_ == 'PRODUCT':
                     entities['products'].append(ent.text)
-        
-        # Pattern-based extraction for error codes
-        error_patterns = [
-            r'\b[A-Z]+[-_]?\d+\b',           # ERROR-123
-            r'\b0x[a-fA-F0-9]+\b',            # 0x7B
-            r'\b\d{3}[-_]?\d{3}[-_]?\d{4}\b',  # Phone-like numbers
+
+        # Regex patterns for reference codes, transaction IDs, account numbers
+        ref_patterns = [
+            r'\b[A-Z0-9]{6,16}\b',
+            r'\b\$\s?\d+(?:,\d{3})*(?:\.\d{2})?\b',
+            r'\b\d{4}[-\s]?\d{4}[-\s]?\d{4}\b'
         ]
-        
-        for pattern in error_patterns:
+        for pattern in ref_patterns:
             matches = re.findall(pattern, text)
-            entities['error_codes'].extend(matches)
-        
-        # Remove duplicates and limit
-        for key in entities:
-            entities[key] = list(set(entities[key]))[:5]
-        
+            for m in matches:
+                if '$' in m:
+                    entities['amounts'].append(m)
+                elif len(m) >= 6:
+                    entities['error_codes'].append(m)
+
+        # Deduplicate and limit
+        for k in entities:
+            entities[k] = list(dict.fromkeys(entities[k]))[:5]
+
         return entities
-    
+
     def generate_title(self, text):
-        """Generate a concise title"""
-        # Take first sentence or first 60 chars
-        sentences = re.split('[.!?]', text)
-        if sentences and sentences[0].strip():
-            title = sentences[0].strip()
-        else:
-            title = text[:60]
+        """Generate a concise, professional title from complaint text"""
+        sentences = re.split(r'[.!?\n]', text)
+        first_sentence = sentences[0].strip() if sentences else text[:60]
         
-        # Clean and capitalize
-        title = title[:70].capitalize()
-        if not title.endswith(('.', '!', '?')):
+        if len(first_sentence) > 75:
+            title = first_sentence[:75].rsplit(' ', 1)[0] + '...'
+        else:
+            title = first_sentence
+
+        title = title.strip().capitalize()
+        if not title.endswith(('.', '!', '?', '...')):
             title += '...'
-        
         return title
-    
+
     def predict_category(self, text):
-        """Predict category using ML model"""
-        if not self.models_loaded:
-            return self.rule_based_category(text)
-        
-        try:
-            text_clean = self.preprocess_text(text)
-            text_vec = self.vectorizer.transform([text_clean])
-            category = self.category_model.predict(text_vec)[0]
-            logger.info(f"ML Predicted category: {category}")
-            return category
-        except Exception as e:
-            logger.error(f"Error in category prediction: {e}")
-            return self.rule_based_category(text)
-    
+        """Predict one of the 5 financial complaint categories"""
+        if self.models_loaded and self.category_model is not None and self.vectorizer is not None:
+            try:
+                vec = self.vectorizer.transform([text])
+                pred = self.category_model.predict(vec)[0]
+                category_name = CATEGORY_MAPPING.get(pred, str(pred))
+                return category_name
+            except Exception as e:
+                logger.error(f"Inference error in category prediction: {e}")
+                return self.rule_based_category(text)
+        return self.rule_based_category(text)
+
     def predict_priority(self, text):
-        """Predict priority using ML model"""
-        if not self.models_loaded:
-            return self.rule_based_priority(text)
-        
-        try:
-            text_clean = self.preprocess_text(text)
-            text_vec = self.vectorizer.transform([text_clean])
-            priority = self.priority_model.predict(text_vec)[0]
-            
-            # Override with rule-based for critical cases
-            urgent_words = ['urgent', 'emergency', 'critical', 'asap', 'immediately']
-            if any(word in text.lower() for word in urgent_words):
-                return 'High'
-            
-            logger.info(f"ML Predicted priority: {priority}")
-            return priority
-        except Exception as e:
-            logger.error(f"Error in priority prediction: {e}")
-            return self.rule_based_priority(text)
-    
-    def rule_based_category(self, text):
-        """Fallback rule-based category assignment"""
-        text = text.lower()
-        
-        if any(word in text for word in ['laptop', 'computer', 'keyboard', 'mouse', 'screen', 'hardware']):
-            return 'Hardware'
-        elif any(word in text for word in ['network', 'wifi', 'internet', 'connect', 'vpn']):
-            return 'Network'
-        elif any(word in text for word in ['password', 'login', 'account', 'access', 'permission']):
-            return 'Access'
-        elif any(word in text for word in ['software', 'app', 'program', 'install', 'update']):
-            return 'Software'
-        elif any(word in text for word in ['email', 'outlook', 'thunderbird', 'mail']):
-            return 'Email'
-        else:
-            return 'Other'
-    
-    def rule_based_priority(self, text):
-        """Fallback rule-based priority assignment"""
-        text = text.lower()
-        
-        if any(word in text for word in ['error', 'not working', 'broken', 'down', 'urgent']):
+        """Predict Priority (High, Medium, Low)"""
+        # Always check high urgency critical keywords first
+        text_lower = text.lower()
+        urgent_keywords = ['urgent', 'emergency', 'fraud', 'stolen', 'unauthorized', 'skimming', 'critical', 'immediately']
+        if any(w in text_lower for w in urgent_keywords):
             return 'High'
-        elif any(word in text for word in ['problem', 'issue', 'help', 'slow']):
+
+        if self.priority_model is not None and self.priority_vectorizer is not None:
+            try:
+                vec = self.priority_vectorizer.transform([text])
+                pred = self.priority_model.predict(vec)[0]
+                return str(pred)
+            except Exception as e:
+                logger.error(f"Inference error in priority prediction: {e}")
+                return self.rule_based_priority(text)
+        return self.rule_based_priority(text)
+
+    def rule_based_category(self, text):
+        """Rule-based fallback for the 5 financial complaint categories"""
+        t = text.lower()
+        if any(w in t for w in ['mortgage', 'loan', 'escrow', 'refinance', 'payoff', 'foreclosure', 'lender', 'home loan', 'property tax']):
+            return 'Mortgage/Loan'
+        elif any(w in t for w in ['credit card', 'prepaid card', 'card limit', 'annual fee', 'late fee', 'visa', 'mastercard', 'amex', 'cashback']):
+            return 'Credit card or prepaid card'
+        elif any(w in t for w in ['fraud', 'theft', 'unauthorized', 'scam', 'stolen', 'skimming', 'dispute', 'identity theft', 'fake']):
+            return 'Theft/Dispute Reporting'
+        elif any(w in t for w in ['bank', 'checking', 'saving', 'account', 'deposit', 'withdrawal', 'branch', 'atm', 'wire transfer', 'overdraft']):
+            return 'Bank Account services'
+        else:
+            return 'Others'
+
+    def rule_based_priority(self, text):
+        """Rule-based priority fallback"""
+        t = text.lower()
+        if any(w in t for w in ['urgent', 'fraud', 'stolen', 'unauthorized', 'emergency', 'immediately', 'critical', 'lawsuit']):
+            return 'High'
+        elif any(w in t for w in ['problem', 'issue', 'delay', 'dispute', 'wrong', 'error', 'fee', 'charge']):
             return 'Medium'
         else:
             return 'Low'
-    
+
     def generate_ticket(self, text):
-        """Main method to generate ticket"""
-        if not text or len(text.strip()) < 10:
+        """Complete structured ticket generation pipeline"""
+        if not text or len(str(text).strip()) < 5:
             return {
-                "title": "Invalid Input",
-                "description": text,
-                "category": "Other",
+                "title": "Invalid Ticket Request",
+                "description": str(text),
+                "category": "Others",
                 "priority": "Low",
                 "entities": {},
-                "error": "Description too short"
+                "ml_used": False,
+                "error": "Description is too short."
             }
-        
-        # Get predictions
+
+        title = self.generate_title(text)
         category = self.predict_category(text)
         priority = self.predict_priority(text)
         entities = self.extract_entities(text)
-        title = self.generate_title(text)
-        
-        # Create ticket
-        ticket = {
+
+        return {
             "title": title,
             "description": text,
             "category": category,
@@ -234,12 +233,10 @@ class AITicketGenerator:
             "entities": entities,
             "ml_used": self.models_loaded
         }
-        
-        return ticket
 
-# Initialize global instance
+# Global singleton instance
 ai_generator = AITicketGenerator()
 
 def generate_ticket(text):
-    """Wrapper function"""
-    return ai_generator.generate_ticket(text)
+    """Entry point for ticket generation"""
+    return ai_generator.generate_ticket(text)

@@ -1,232 +1,231 @@
-# preprocessing/text_preprocessing.py (COMPLETELY REVISED)
-import pandas as pd
+# preprocessing/text_preprocessing.py
+import os
+import sys
+import json
 import re
 import numpy as np
+import pandas as pd
+import spacy
 from tqdm import tqdm
-import os
 
-print("="*60)
-print("📝 TEXT PREPROCESSING")
-print("="*60)
+print("="*70)
+print("[STEP 1 & 2] DATA LOADING AND TEXT PREPROCESSING")
+print("="*70)
 
-# Setup paths
+# Setup directories
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-INPUT_PATH = os.path.join(BASE_DIR, "data", "tickets.csv")
+DATA_DIR = os.path.join(BASE_DIR, "data")
 OUTPUT_DIR = os.path.join(BASE_DIR, "model", "output")
-
-print(f"\n📂 Input file: {INPUT_PATH}")
-print(f"📂 Output directory: {OUTPUT_DIR}")
-
-# Check if input file exists
-if not os.path.exists(INPUT_PATH):
-    print(f"❌ ERROR: Input file not found at {INPUT_PATH}")
-    
-    # Try alternative paths
-    alt_paths = [
-        os.path.join(BASE_DIR, "tickets.csv"),
-        os.path.join(BASE_DIR, "data", "Consumer_Complaints.csv"),
-        os.path.join(BASE_DIR, "Consumer_Complaints.csv")
-    ]
-    
-    for alt_path in alt_paths:
-        if os.path.exists(alt_path):
-            INPUT_PATH = alt_path
-            print(f"✅ Found input file at: {INPUT_PATH}")
-            break
-    else:
-        print("❌ Could not find input file!")
-        exit(1)
-
-# Create output directory
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
-# First, let's see what columns are in the file
-print("\n🔍 Examining file structure...")
+# Load spaCy model
+print("\n[INFO] Loading spaCy English model...")
 try:
-    # Try different encodings
-    encodings = ['utf-8', 'latin-1', 'cp1252', 'iso-8859-1']
-    df_header = None
-    
-    for encoding in encodings:
-        try:
-            df_header = pd.read_csv(INPUT_PATH, nrows=0, encoding=encoding)
-            print(f"✅ Using encoding: {encoding}")
-            break
-        except:
-            continue
-    
-    if df_header is None:
-        df_header = pd.read_csv(INPUT_PATH, nrows=0, encoding='latin-1')
-        print("⚠️ Using latin-1 encoding")
-    
-    print(f"\n📊 Columns found in dataset ({len(df_header.columns)} total):")
-    for i, col in enumerate(df_header.columns):
-        print(f"  {i+1}. '{col}'")
-    
-    # Now load actual data
-    print("\n📥 Loading data (this may take a while for 300k+ rows)...")
-    
-    # Load in chunks to handle large file
-    chunk_size = 50000
-    chunks = []
-    
-    with tqdm(desc="Loading chunks") as pbar:
-        for chunk in pd.read_csv(INPUT_PATH, chunksize=chunk_size, encoding=encoding, low_memory=False):
-            chunks.append(chunk)
-            pbar.update(1)
-    
-    df = pd.concat(chunks, ignore_index=True)
-    print(f"✅ Loaded {len(df)} total rows")
-    
-except Exception as e:
-    print(f"❌ Error loading file: {e}")
-    exit(1)
+    nlp = spacy.load("en_core_web_sm")
+except Exception:
+    import subprocess
+    subprocess.run(["python", "-m", "spacy", "download", "en_core_web_sm"])
+    nlp = spacy.load("en_core_web_sm")
+stopwords = nlp.Defaults.stop_words
+print("[OK] spaCy loaded successfully")
 
-# Find the complaint narrative column
-narrative_col = None
-for col in df.columns:
-    col_lower = col.lower()
-    if any(word in col_lower for word in ['narrative', 'complaint', 'consumer complaint']):
-        narrative_col = col
-        print(f"\n✅ Found narrative column: '{narrative_col}'")
-        break
+# -------------------------------------------------------------------
+# 1. DATA LOADING
+# -------------------------------------------------------------------
+def load_complaints_data():
+    """Load complaints data from JSON or CSV fallback"""
+    # Look for JSON file first
+    possible_json_files = [
+        os.path.join(BASE_DIR, "complaints-2021-05-14_08_16.json"),
+        os.path.join(DATA_DIR, "complaints-2021-05-14_08_16.json"),
+        os.path.join(BASE_DIR, "complaints.json"),
+        os.path.join(DATA_DIR, "complaints.json")
+    ]
+    
+    for json_file in possible_json_files:
+        if os.path.exists(json_file):
+            print(f"[INFO] Found JSON dataset at: {json_file}")
+            with open(json_file, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+            df = pd.json_normalize(data)
+            
+            # Standardize column renaming
+            rename_dict = {
+                '_index': 'index',
+                '_type': 'type',
+                '_id': 'id',
+                '_score': 'score',
+                '_source.tags': 'tags',
+                '_source.zip_code': 'zip_code',
+                '_source.complaint_id': 'complaint_id',
+                '_source.issue': 'issue',
+                '_source.date_received': 'date_received',
+                '_source.state': 'state',
+                '_source.consumer_disputed': 'consumer_disputed',
+                '_source.product': 'product',
+                '_source.company_response': 'company_response',
+                '_source.company': 'company',
+                '_source.submitted_via': 'submitted_via',
+                '_source.date_sent_to_company': 'date_sent_to_company',
+                '_source.company_public_response': 'company_public_response',
+                '_source.sub_product': 'sub_product',
+                '_source.timely': 'timely',
+                '_source.complaint_what_happened': 'complaint_what_happened',
+                '_source.sub_issue': 'sub_issue',
+                '_source.consumer_consent_provided': 'consumer_consent_provided'
+            }
+            df.rename(columns={k: v for k, v in rename_dict.items() if k in df.columns}, inplace=True)
+            return df
+            
+    print("[WARNING] JSON complaint file not found. Checking CSV datasets...")
+    possible_csv_files = [
+        os.path.join(DATA_DIR, "Customer_support_data.csv"),
+        os.path.join(DATA_DIR, "tickets.csv"),
+        os.path.join(BASE_DIR, "tickets.csv")
+    ]
+    
+    for csv_file in possible_csv_files:
+        if os.path.exists(csv_file):
+            print(f"[INFO] Loading CSV dataset at: {csv_file}")
+            try:
+                df = pd.read_csv(csv_file, low_memory=False, encoding='utf-8')
+            except Exception:
+                df = pd.read_csv(csv_file, low_memory=False, encoding='latin-1')
+                
+            # Map text column to complaint_what_happened
+            text_col = None
+            for col in ['Customer Remarks', 'complaint_what_happened', 'narrative', 'complaint', 'clean_text', 'description']:
+                if col in df.columns:
+                    text_col = col
+                    break
+            
+            if text_col:
+                df.rename(columns={text_col: 'complaint_what_happened'}, inplace=True)
+                if 'product' not in df.columns and 'category' in df.columns:
+                    df['product'] = df['category']
+                if 'sub_product' not in df.columns and 'Sub-category' in df.columns:
+                    df['sub_product'] = df['Sub-category']
+                return df
+                
+    # If no files found, generate starter financial complaint dataset
+    print("[INFO] Creating sample financial complaints dataset for demonstration...")
+    sample_data = {
+        'complaint_what_happened': [
+            "I cannot get from Chase who services my mortgage, who owns it and who has original loan docs. I need mortgage payoff statement.",
+            "The bill amount of my credit card was debited twice. Please look into the matter and resolve at the earliest with refund.",
+            "I want to open a salary account at your downtown branch. Please provide me the procedure and checking deposit requirements.",
+            "Yesterday, I received a fraudulent email regarding renewal of my services. An unauthorized transaction of $500 occurred on my card.",
+            "What is the procedure to know my CIBIL credit score and report dispute against late payment mark?",
+            "I need to know the number of bank branches and their locations for account withdrawal and cashier check services.",
+            "My credit card interest rate was increased without prior notice and late payment fee was charged wrongfully.",
+            "The mortgage lender failed to escrow property tax correctly causing penalty from tax assessor.",
+            "Identity theft incident where unknown person opened loan account in my name without verification.",
+            "Unable to access online banking app to transfer money between savings and checking accounts.",
+            "Card skimming theft reported at ATM machine. $1200 withdrawn without my authorization.",
+            "Refinancing home loan paperwork delayed over 90 days causing interest rate lock expiration.",
+            "Dispute regarding billing error on annual fee for rewards credit card.",
+            "Customer service branch representative was very rude and unhelpful during account closure inquiry.",
+            "Report unauthorized wire transfer from commercial business bank account to foreign bank."
+        ] * 40,
+        'product': ['Mortgage', 'Credit Card', 'Bank Account', 'Theft', 'Other'] * 120,
+        'sub_product': ['Conventional', 'Cashback', 'Checking', 'Fraud', 'General'] * 120
+    }
+    return pd.DataFrame(sample_data)
 
-if narrative_col is None:
-    # Try to find any column with long text
-    print("\n🔍 Looking for text column...")
-    for col in df.columns:
-        if df[col].dtype == 'object':
-            # Check sample length
-            sample = df[col].iloc[0] if len(df) > 0 else ""
-            if isinstance(sample, str) and len(sample) > 100:
-                narrative_col = col
-                print(f"✅ Using column '{col}' as narrative (sample length: {len(sample)})")
-                break
+# Load data
+df = load_complaints_data()
+print(f"[DATA] Total raw records: {len(df)}")
 
-if narrative_col is None:
-    print("❌ Could not find narrative column!")
-    exit(1)
+# Filter empty complaints
+if 'complaint_what_happened' in df.columns:
+    df['complaint_what_happened'].replace('', np.nan, inplace=True)
+    df.dropna(subset=['complaint_what_happened'], inplace=True)
+    df = df[df['complaint_what_happened'].astype(str).str.strip().str.len() > 10].copy()
+    print(f"[DATA] Valid complaints with narrative: {len(df)}")
+else:
+    raise ValueError("[ERROR] Column 'complaint_what_happened' not found in dataset!")
 
-# Drop rows without narrative
-initial_count = len(df)
-df = df[df[narrative_col].notna()].copy()
-print(f"\n📊 Rows with narrative: {len(df)} (dropped {initial_count - len(df)} rows)")
+# Limit processing sample size if dataset is extremely large for fast, responsive processing
+MAX_SAMPLES = 25000
+if len(df) > MAX_SAMPLES:
+    print(f"[INFO] Sampling {MAX_SAMPLES} records for optimal topic modeling speed...")
+    df = df.sample(n=MAX_SAMPLES, random_state=40).reset_index(drop=True)
 
-# Text cleaning function
+# -------------------------------------------------------------------
+# 2. TEXT CLEANING & PREPROCESSING
+# -------------------------------------------------------------------
 def clean_text(text):
-    """Clean and normalize text"""
+    """
+    Clean text:
+    - Lowercase
+    - Remove text in square brackets
+    - Remove punctuation
+    - Remove words with numbers
+    """
     if pd.isna(text):
         return ""
-    
-    text = str(text)
-    # Remove excessive newlines
-    text = re.sub(r'[\r\n]+', ' ', text)
-    # Convert to lowercase
-    text = text.lower()
-    # Remove special characters but keep basic punctuation
-    text = re.sub(r'[^a-z0-9\s\.\,\-\_\$\%]', ' ', text)
-    # Remove extra whitespace
-    text = re.sub(r'\s+', ' ', text).strip()
+    text = str(text).lower()
+    text = re.sub(r'\[.*?\]', ' ', text)       # Remove text in square brackets
+    text = re.sub(r'[^\w\s]', ' ', text)       # Remove punctuation
+    text = re.sub(r'\w*\d\w*', ' ', text)      # Remove words containing numbers
+    text = re.sub(r'\s+', ' ', text).strip()   # Remove extra spaces
     return text
 
-print("\n🧹 Cleaning text data...")
-tqdm.pandas()
-df["clean_text"] = df[narrative_col].progress_apply(clean_text)
+def lemmatization(texts):
+    """Lemmatize text and remove stopwords using spaCy"""
+    lemma_sentences = []
+    for doc in tqdm(nlp.pipe(texts, batch_size=256, n_process=1), total=len(texts), desc="Lemmatizing"):
+        sent = [token.lemma_ for token in doc if token.text not in stopwords and len(token.lemma_) > 1]
+        lemma_sentences.append(' '.join(sent))
+    return lemma_sentences
 
-# Remove very short texts (likely not useful)
-initial_count = len(df)
-df = df[df["clean_text"].str.len() > 20].copy()
-print(f"📊 After removing short texts: {len(df)} rows (removed {initial_count - len(df)} rows)")
+def extract_pos_tags(texts):
+    """Extract only NN POS tags (nouns)"""
+    pos_sentences = []
+    for doc in tqdm(nlp.pipe(texts, batch_size=256, n_process=1), total=len(texts), desc="Extracting NN POS"):
+        sent = [token.text for token in doc if token.tag_ == 'NN']
+        pos_sentences.append(' '.join(sent))
+    return pos_sentences
 
-# Create category labels
-print("\n🏷️ Creating category labels...")
+# Create df_clean
+print("\n[CLEAN] 1. Applying basic text cleaning...")
+tqdm.pandas(desc="Cleaning text")
+df_clean = pd.DataFrame()
+df_clean['complaint_what_happened'] = df['complaint_what_happened'].progress_apply(clean_text)
 
-def create_category(text):
-    """Create category based on text content"""
-    text = text.lower()
-    
-    # Define category keywords
-    categories = {
-        'Credit Card': ['credit card', 'creditcard', 'visa', 'mastercard', 'amex', 'discover'],
-        'Banking': ['bank', 'checking', 'savings', 'account', 'deposit', 'withdraw', 'overdraft'],
-        'Loan': ['loan', 'mortgage', 'refinance', 'borrow', 'lender'],
-        'Debt Collection': ['debt', 'collection', 'collector', 'owe', 'collect'],
-        'Student Loan': ['student', 'college', 'tuition', 'financial aid'],
-        'Vehicle Loan': ['auto', 'car', 'vehicle', 'truck', 'lease'],
-        'Payday Loan': ['payday', 'cash advance'],
-        'Other': []
-    }
-    
-    for category, keywords in categories.items():
-        if any(keyword in text for keyword in keywords):
-            return category
-    
-    return 'Other'
+# Drop any that became empty after basic cleaning
+df_clean = df_clean[df_clean['complaint_what_happened'].str.len() > 5].reset_index(drop=True)
 
-# Apply category creation
-df['category'] = df['clean_text'].progress_apply(create_category)
+print("\n[CLEAN] 2. Applying lemmatization & stopword removal...")
+df_clean['complaint_what_happened_lemmatized'] = lemmatization(df_clean['complaint_what_happened'].tolist())
 
-# Show category distribution
-print("\n📊 Category distribution:")
-cat_counts = df['category'].value_counts()
-for cat, count in cat_counts.items():
-    percentage = (count / len(df)) * 100
-    print(f"  {cat}: {count} ({percentage:.1f}%)")
+if 'product' in df.columns:
+    df_clean['category'] = df['product'].values[:len(df_clean)]
+if 'sub_product' in df.columns:
+    df_clean['sub_category'] = df['sub_product'].values[:len(df_clean)]
 
-# Create priority labels
-print("\n⚠️ Creating priority labels...")
+print("\n[CLEAN] 3. Extracting NN POS tags...")
+df_clean['complaint_POS_removed'] = extract_pos_tags(df_clean['complaint_what_happened_lemmatized'].tolist())
 
-def create_priority(text):
-    """Create priority based on text content"""
-    text = text.lower()
-    
-    # High priority indicators
-    high_keywords = [
-        'urgent', 'asap', 'emergency', 'critical', 'immediately',
-        'fraud', 'stolen', 'unauthorized', 'error', 'wrong',
-        'legal', 'lawsuit', 'court', 'attorney'
-    ]
-    
-    # Medium priority indicators
-    medium_keywords = [
-        'problem', 'issue', 'difficulty', 'trouble', 'confusing',
-        'help', 'assist', 'confused', 'unclear', 'delay'
-    ]
-    
-    if any(word in text for word in high_keywords):
-        return 'High'
-    elif any(word in text for word in medium_keywords):
-        return 'Medium'
-    else:
-        return 'Low'
+print("\n[CLEAN] 4. Removing -PRON- and masked personal details (xxxx)...")
+df_clean['Complaint_clean'] = df_clean['complaint_POS_removed'].str.replace('-PRON-', '', regex=False)
+df_clean['Complaint_clean'] = df_clean['Complaint_clean'].str.replace('xxxx', '', regex=False)
+df_clean['Complaint_clean'] = df_clean['Complaint_clean'].str.replace('xx', '', regex=False)
+df_clean['Complaint_clean'] = df_clean['Complaint_clean'].str.replace(r'\s+', ' ', regex=True).str.strip()
 
-df['priority'] = df['clean_text'].progress_apply(create_priority)
+# Filter out empty clean complaints
+df_clean = df_clean[df_clean['Complaint_clean'].str.len() > 3].reset_index(drop=True)
 
-# Show priority distribution
-print("\n📊 Priority distribution:")
-priority_counts = df['priority'].value_counts()
-for pri, count in priority_counts.items():
-    percentage = (count / len(df)) * 100
-    print(f"  {pri}: {count} ({percentage:.1f}%)")
+# -------------------------------------------------------------------
+# SAVE PREPROCESSED DATA
+# -------------------------------------------------------------------
+output_clean_path = os.path.join(OUTPUT_DIR, "cleaned_tickets.csv")
+df_clean.to_csv(output_clean_path, index=False, encoding='utf-8')
+print(f"\n[SAVE] Saved preprocessed data to: {output_clean_path} ({len(df_clean)} records)")
 
-# Save processed data
-print("\n💾 Saving processed data...")
-
-# Save full dataset
-full_path = os.path.join(OUTPUT_DIR, "cleaned_tickets.csv")
-df.to_csv(full_path, index=False)
-print(f"✅ Saved full dataset to: {full_path}")
-
-# Save training data (just what we need for models)
-training_path = os.path.join(OUTPUT_DIR, "training_data.csv")
-df[["clean_text", "category", "priority"]].to_csv(training_path, index=False)
-print(f"✅ Saved training data to: {training_path}")
-
-print("\n" + "="*60)
-print(f"✅ PREPROCESSING COMPLETED!")
-print(f"📊 Final dataset size: {len(df)} rows")
-print("="*60)
-
-# Show sample
-print("\n📝 Sample of processed data:")
-print(df[["clean_text", "category", "priority"]].head(3))
+print("\n" + "="*70)
+print("[SUCCESS] PREPROCESSING PIPELINE COMPLETED SUCCESSFULLY!")
+print("="*70)
+print("\nSample processed records:")
+print(df_clean[['complaint_what_happened', 'Complaint_clean']].head(3))
+

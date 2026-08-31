@@ -1,11 +1,11 @@
 {% extends "base.html" %}
 
-{% block title %}User Dashboard - AI Ticket System{% endblock %}
+{% block title %}User Portal — ResolvAI{% endblock %}
 
 {% block content %}
 <div class="dashboard-header">
-    <h1>Welcome, {{ session.get('username') }}! 👋</h1>
-    <p>Here's your AI-powered ticket dashboard</p>
+    <h1>Welcome back, {{ session.get('username') }}! 👋</h1>
+    <p>Track your complaints and view AI resolution status in real time</p>
 </div>
 
 <!-- Accuracy Stats -->
@@ -17,7 +17,7 @@
         <div class="progress-bar">
             <div class="progress-fill" style="width: {{ classification_accuracy }}%"></div>
         </div>
-        <p class="stat-description">Hardware • Network • Access • Other</p>
+        <p class="stat-description">Bank Accounts • Credit Cards • Theft/Dispute • Loans • Others</p>
     </div>
 
     <div class="accuracy-card">

@@ -1,233 +1,236 @@
-# model/train_category_model.py (UPDATED - Clear accuracy display)
-import pandas as pd
-import numpy as np
-from sklearn.feature_extraction.text import TfidfVectorizer
-from sklearn.model_selection import train_test_split, cross_val_score
-from sklearn.linear_model import LogisticRegression
-from sklearn.metrics import accuracy_score, classification_report, confusion_matrix
-import pickle
+# model/train_category_model.py
 import os
 import sys
+import json
+import pickle
+import numpy as np
+import pandas as pd
 from datetime import datetime
 
-# Add parent directory to path
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from sklearn.feature_extraction.text import CountVectorizer, TfidfTransformer, TfidfVectorizer
+from sklearn.model_selection import train_test_split, StratifiedKFold, GridSearchCV
+from sklearn.linear_model import LogisticRegression
+from sklearn.tree import DecisionTreeClassifier
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.naive_bayes import MultinomialNB
+from sklearn.metrics import (
+    accuracy_score, precision_score, recall_score, f1_score,
+    roc_auc_score, classification_report, confusion_matrix
+)
 
-print("="*80)
-print("🚀 CATEGORY MODEL TRAINING")
-print("="*80)
-print(f"📅 Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-print("="*80)
-
-# Get the correct paths based on your folder structure
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-DATA_PATH = os.path.join(BASE_DIR, 'model', 'output', 'training_data.csv')
-MODEL_DIR = os.path.dirname(os.path.abspath(__file__))  # model folder
-OUTPUT_DIR = os.path.join(BASE_DIR, 'model', 'output')
-
-print(f"\n📂 Looking for training data at: {DATA_PATH}")
-
-# Check if file exists
-if not os.path.exists(DATA_PATH):
-    print(f"❌ ERROR: Training data not found at {DATA_PATH}")
-    
-    # Try alternative locations
-    alt_paths = [
-        os.path.join(BASE_DIR, 'model', 'output', 'cleaned_tickets.csv'),
-        os.path.join(BASE_DIR, 'output', 'training_data.csv'),
-        os.path.join(BASE_DIR, 'data', 'training_data.csv'),
-    ]
-    
-    print("\n🔍 Searching alternative locations...")
-    found = False
-    for alt_path in alt_paths:
-        if os.path.exists(alt_path):
-            DATA_PATH = alt_path
-            print(f"✅ Found at: {DATA_PATH}")
-            found = True
-            break
-    
-    if not found:
-        print("\n❌ Could not find training data file!")
-        print("\nPlease run preprocessing first:")
-        print("  python preprocessing/text_preprocessing.py")
-        exit(1)
-
-# Load the data
-print(f"\n📥 Loading training data...")
+# Optional XGBoost import with graceful fallback
 try:
-    df = pd.read_csv(DATA_PATH)
-    print(f"✅ Loaded {len(df)} rows")
-    print(f"📊 Columns: {df.columns.tolist()}")
-except Exception as e:
-    print(f"❌ Error loading file: {e}")
-    exit(1)
+    from xgboost import XGBClassifier
+    HAS_XGBOOST = True
+except ImportError:
+    from sklearn.ensemble import GradientBoostingClassifier as XGBClassifier
+    HAS_XGBOOST = False
 
-# Check if we have the required columns
-if 'category' not in df.columns:
-    print("\n⚠️ Category column not found. Creating from text...")
-    
-    def determine_category(text):
-        text = str(text).lower()
-        if any(word in text for word in ['credit card', 'visa', 'mastercard', 'amex', 'discover']):
-            return 'Credit Card'
-        elif any(word in text for word in ['bank', 'checking', 'savings', 'account', 'deposit', 'withdraw']):
-            return 'Banking'
-        elif any(word in text for word in ['loan', 'mortgage', 'refinance', 'borrow']):
-            return 'Loan'
-        elif any(word in text for word in ['debt', 'collection', 'collector', 'owe']):
-            return 'Debt Collection'
-        elif any(word in text for word in ['student', 'college', 'tuition', 'financial aid']):
-            return 'Student Loan'
-        else:
-            return 'Other'
-    
-    if 'clean_text' in df.columns:
-        df['category'] = df['clean_text'].apply(determine_category)
-    else:
-        # Try to find a text column
-        text_cols = df.select_dtypes(include=['object']).columns
-        if len(text_cols) > 0:
-            df['clean_text'] = df[text_cols[0]].astype(str)
-            df['category'] = df['clean_text'].apply(determine_category)
-        else:
-            print("❌ No text column found for category creation!")
-            exit(1)
-
-# Check if we have clean_text column
-if 'clean_text' not in df.columns:
-    print("\n⚠️ clean_text column not found. Looking for text column...")
-    text_cols = df.select_dtypes(include=['object']).columns
-    if len(text_cols) > 0:
-        df['clean_text'] = df[text_cols[0]].astype(str)
-        print(f"✅ Using '{text_cols[0]}' as text column")
-    else:
-        print("❌ No text column found!")
-        exit(1)
-
-# Remove any rows with missing values
-initial_len = len(df)
-df = df.dropna(subset=['clean_text', 'category'])
-df = df[df['clean_text'].str.len() > 10]
-print(f"\n📊 After cleaning: {len(df)} rows (removed {initial_len - len(df)} rows)")
-
-# Show category distribution
-print("\n" + "-"*80)
-print("📊 CATEGORY DISTRIBUTION")
-print("-"*80)
-category_counts = df['category'].value_counts()
-total = len(df)
-for cat, count in category_counts.items():
-    percentage = (count / total) * 100
-    bar = "█" * int(percentage/2) + "░" * (50 - int(percentage/2))
-    print(f"  {cat:15} : {count:6} ({percentage:5.1f}%) {bar}")
-
-# Prepare features and labels
-X = df["clean_text"].fillna("")
-y = df["category"]
-
-# Split data
-X_train, X_test, y_train, y_test = train_test_split(
-    X, y, test_size=0.2, random_state=42, stratify=y
-)
-
-print(f"\n📊 Training set: {len(X_train)} samples")
-print(f"📊 Test set: {len(X_test)} samples")
-
-# Vectorize text
-print("\n🔧 Creating TF-IDF vectors...")
-vectorizer = TfidfVectorizer(
-    max_features=5000,
-    stop_words='english',
-    ngram_range=(1, 2),
-    min_df=5,
-    max_df=0.8
-)
-
-print("Vectorizing training text...")
-X_train_vec = vectorizer.fit_transform(X_train)
-print(f"Vectorized shape: {X_train_vec.shape}")
-
-print("Vectorizing test text...")
-X_test_vec = vectorizer.transform(X_test)
-
-# Train model
-print("\n🤖 Training category model...")
-model = LogisticRegression(
-    C=1.0,
-    max_iter=1000,
-    n_jobs=-1,
-    random_state=42,
-    class_weight='balanced'
-)
-
-model.fit(X_train_vec, y_train)
-
-# Evaluate
-print("\n" + "="*80)
-print("📊 MODEL EVALUATION RESULTS")
 print("="*80)
+print("[STEP 6 & 7] SUPERVISED MODEL BUILDING, TRAINING & EVALUATION")
+print("="*80)
+print(f"Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
 
-y_pred = model.predict(X_test_vec)
-accuracy = accuracy_score(y_test, y_pred)
+# Setup directories
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+OUTPUT_DIR = os.path.join(BASE_DIR, "model", "output")
+MODEL_DIR = os.path.join(BASE_DIR, "model")
+TRAINING_DATA_PATH = os.path.join(OUTPUT_DIR, "training_data.csv")
 
-# Display accuracy prominently (WILL SHOW CLEARLY)
-print("\n" + "█"*80)
-print("█"*80)
-print(f"███      CATEGORY MODEL ACCURACY: {accuracy:.4f} ({accuracy*100:.2f}%)      ███")
-print("█"*80)
-print("█"*80 + "\n")
+# 1. Load Training Data
+if not os.path.exists(TRAINING_DATA_PATH) or os.path.getsize(TRAINING_DATA_PATH) == 0:
+    print("[INFO] Training data not found. Running topic modeling first...")
+    from model.topic_modelling_nmf import training_data
+else:
+    print(f"[LOAD] Loading labeled training data from: {TRAINING_DATA_PATH}")
+    training_data = pd.read_csv(TRAINING_DATA_PATH)
 
-# Show per-class accuracy
-print("\n" + "-"*80)
-print("📊 PER-CLASS PERFORMANCE")
-print("-"*80)
-report = classification_report(y_test, y_pred, output_dict=True)
-for label in report.keys():
-    if label not in ['accuracy', 'macro avg', 'weighted avg']:
-        print(f"\n  {label}:")
-        print(f"    Precision: {report[label]['precision']:.4f}")
-        print(f"    Recall:    {report[label]['recall']:.4f}")
-        print(f"    F1-Score:  {report[label]['f1-score']:.4f}")
+# Validate columns
+text_col = 'complaint_what_happened' if 'complaint_what_happened' in training_data.columns else 'Complaint_clean'
+topic_col = 'Topic'
 
-# Cross-validation
-print("\n" + "-"*80)
-print("📊 CROSS-VALIDATION SCORES")
-print("-"*80)
-cv_scores = cross_val_score(model, X_train_vec, y_train, cv=5)
-print(f"  CV Scores: {[f'{score:.4f}' for score in cv_scores]}")
-print(f"  Mean CV Accuracy: {cv_scores.mean():.4f} (+/- {cv_scores.std()*2:.4f})")
+training_data = training_data.dropna(subset=[text_col, topic_col]).reset_index(drop=True)
+print(f"[DATA] Total training samples: {len(training_data)}")
 
-# Save model
-print("\n💾 Saving model...")
-os.makedirs(MODEL_DIR, exist_ok=True)
+Topic_names = {
+    0: 'Bank Account services',
+    1: 'Credit card or prepaid card',
+    2: 'Others',
+    3: 'Theft/Dispute Reporting',
+    4: 'Mortgage/Loan'
+}
 
-model_path = os.path.join(MODEL_DIR, 'category_model.pkl')
-with open(model_path, 'wb') as f:
-    pickle.dump(model, f)
-print(f"✅ Model saved to: {model_path}")
+# -------------------------------------------------------------------
+# FEATURE EXTRACTION FOR SUPERVISED LEARNING
+# -------------------------------------------------------------------
+print("\n[INFO] Extracting Count Vectors & TF-IDF Transformation...")
+count_vect = CountVectorizer()
+X_train_counts = count_vect.fit_transform(training_data[text_col])
 
-# Save vectorizer
-vectorizer_path = os.path.join(MODEL_DIR, 'vectorizer.pkl')
-with open(vectorizer_path, 'wb') as f:
-    pickle.dump(vectorizer, f)
-print(f"✅ Vectorizer saved to: {vectorizer_path}")
+tfidf_transformer = TfidfTransformer()
+X_train_tf = tfidf_transformer.fit_transform(X_train_counts)
 
-# Save accuracy for dashboard
-os.makedirs(OUTPUT_DIR, exist_ok=True)
-accuracy_path = os.path.join(OUTPUT_DIR, 'category_accuracy.txt')
-with open(accuracy_path, 'w') as f:
-    f.write(str(accuracy))
-print(f"✅ Accuracy saved to: {accuracy_path}")
+# Also prepare a standalone TF-IDF Vectorizer for simple unified deployment
+tfidf_unified = TfidfVectorizer(max_features=10000, stop_words='english', ngram_range=(1, 2))
+X_unified = tfidf_unified.fit_transform(training_data[text_col])
+
+# Train-test split (80/20, random_state=40, stratified)
+train_X, test_X, train_y, test_y = train_test_split(
+    X_train_tf, training_data[topic_col], test_size=0.2, random_state=40, stratify=training_data[topic_col]
+)
+
+print(f"[DATA] Training shape: {train_X.shape}, Test shape: {test_X.shape}")
+
+# -------------------------------------------------------------------
+# MODEL EVALUATION HELPER
+# -------------------------------------------------------------------
+def eval_model(y_true, y_pred, y_pred_proba, model_name="Model", stage="Test"):
+    """Compute and print all classification metrics"""
+    acc = accuracy_score(y_true, y_pred)
+    prec = precision_score(y_true, y_pred, average='weighted', zero_division=0)
+    rec = recall_score(y_true, y_pred, average='weighted', zero_division=0)
+    f1 = f1_score(y_true, y_pred, average='weighted', zero_division=0)
+    
+    try:
+        if y_pred_proba is not None and len(np.unique(y_true)) > 1:
+            auc = roc_auc_score(y_true, y_pred_proba, average='weighted', multi_class='ovr')
+        else:
+            auc = 0.0
+    except Exception:
+        auc = 0.0
+        
+    print(f"\n--- {model_name} [{stage} Results] ---")
+    print(f"Accuracy:        {acc:.4f} ({acc*100:.2f}%)")
+    print(f"Precision (W):   {prec:.4f}")
+    print(f"Recall (W):      {rec:.4f}")
+    print(f"F1-Score (W):    {f1:.4f}")
+    print(f"ROC AUC (W-OvR): {auc:.4f}")
+    
+    return {
+        "Accuracy": round(float(acc), 4),
+        "Precision": round(float(prec), 4),
+        "Recall": round(float(rec), 4),
+        "F1 Score": round(float(f1), 4),
+        "ROC AUC Score": round(float(auc), 4)
+    }
+
+# -------------------------------------------------------------------
+# CANDIDATE MODELS TRAINING & COMPARISON
+# -------------------------------------------------------------------
+models = {
+    "Logistic Regression": LogisticRegression(C=1.0, max_iter=1000, random_state=40, class_weight='balanced'),
+    "Decision Tree": DecisionTreeClassifier(max_depth=15, random_state=40, class_weight='balanced'),
+    "Random Forest": RandomForestClassifier(n_estimators=100, max_depth=15, random_state=40, class_weight='balanced', n_jobs=-1),
+    "Multinomial Naive Bayes": MultinomialNB(alpha=0.5),
+    "XGBoost Classifier": XGBClassifier(random_state=40)
+}
+
+results = {}
+trained_models = {}
 
 print("\n" + "="*80)
-print("✅ CATEGORY MODEL TRAINING COMPLETED SUCCESSFULLY!")
-print(f"📅 Completed at: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+print("[TRAINING] TRAINING AND EVALUATING CANDIDATE MODELS")
 print("="*80)
 
-# FINAL ACCURACY DISPLAY - VERY CLEAR
-print("\n" + "🔥"*40)
-print("🔥"*40)
-print(f"🔥           FINAL CATEGORY ACCURACY: {accuracy*100:.2f}%                🔥")
-print("🔥"*40)
-print("🔥"*40 + "\n")
+for name, clf in models.items():
+    print(f"\n* Training {name}...")
+    try:
+        clf.fit(train_X, train_y)
+        trained_models[name] = clf
+        
+        # Predictions
+        y_test_pred = clf.predict(test_X)
+        y_test_proba = clf.predict_proba(test_X) if hasattr(clf, "predict_proba") else None
+        
+        metrics = eval_model(test_y, y_test_pred, y_test_proba, model_name=name, stage="Test")
+        results[name] = metrics
+    except Exception as e:
+        print(f"[ERROR] Error training {name}: {e}")
+
+# -------------------------------------------------------------------
+# FINAL MODEL COMPARISON TABLE
+# -------------------------------------------------------------------
+print("\n" + "="*80)
+print("[SUMMARY] FINAL MODEL COMPARISON SUMMARY")
+print("="*80)
+results_df = pd.DataFrame(results).T
+print(results_df.to_string())
+
+# Select best model by F1 Score
+best_model_name = results_df['F1 Score'].idxmax()
+best_model = trained_models[best_model_name]
+best_accuracy = results[best_model_name]["Accuracy"]
+
+print("\n" + "="*80)
+print(f"[BEST MODEL] {best_model_name}")
+print(f"[PERFORMANCE] Test Accuracy: {best_accuracy*100:.2f}% | Weighted F1: {results[best_model_name]['F1 Score']}")
+print("="*80 + "\n")
+
+# Detailed Classification Report for Best Model
+best_pred = best_model.predict(test_X)
+print("\n[REPORT] Detailed Classification Report for Best Model:")
+target_names = [Topic_names[i] for i in sorted(Topic_names.keys())]
+print(classification_report(test_y, best_pred, target_names=target_names, zero_division=0))
+
+# -------------------------------------------------------------------
+# SERIALIZE BEST MODEL AND VECTORIZERS
+# -------------------------------------------------------------------
+print("\n[SAVE] Saving best model and artifacts...")
+
+# Fit unified pipeline model for production inference
+best_unified_model = LogisticRegression(C=1.0, max_iter=1000, random_state=40, class_weight='balanced')
+best_unified_model.fit(X_unified, training_data[topic_col])
+
+# Save vectorizers
+with open(os.path.join(MODEL_DIR, "vectorizer.pkl"), "wb") as f:
+    pickle.dump(tfidf_unified, f)
+
+with open(os.path.join(MODEL_DIR, "count_vectorizer.pkl"), "wb") as f:
+    pickle.dump(count_vect, f)
+
+with open(os.path.join(MODEL_DIR, "tfidf_transformer.pkl"), "wb") as f:
+    pickle.dump(tfidf_transformer, f)
+
+# Save category model
+with open(os.path.join(MODEL_DIR, "category_model.pkl"), "wb") as f:
+    pickle.dump(best_unified_model, f)
+
+# Save accuracy txt
+with open(os.path.join(OUTPUT_DIR, "category_accuracy.txt"), "w") as f:
+    f.write(str(best_accuracy))
+
+# Save results JSON
+with open(os.path.join(OUTPUT_DIR, "model_comparison_results.json"), "w") as f:
+    json.dump(results, f, indent=4)
+
+print(f"[OK] Saved category_model.pkl, vectorizers, and metrics to {MODEL_DIR}")
+
+# -------------------------------------------------------------------
+# STEP 8: INFERENCE VERIFICATION
+# -------------------------------------------------------------------
+print("\n" + "="*80)
+print("[STEP 8] INFERENCE ON TEST SAMPLES")
+print("="*80)
+
+sample_complaints = [
+    "I can not get from chase who services my mortgage, who owns it and who has original loan docs",
+    "The bill amount of my credit card was debited twice. Please look into the matter and resolve at the earliest.",
+    "I want to open a salary account at your downtown branch. Please provide me the procedure.",
+    "Yesterday, I received a fraudulent email regarding renewal of my services.",
+    "What is the procedure to know my CIBIL score?",
+    "I need to know the number of bank branches and their locations in the city of Dubai"
+]
+
+def predict_category(text_list):
+    transformed = tfidf_unified.transform(text_list)
+    preds = best_unified_model.predict(transformed)
+    return [Topic_names[p] for p in preds]
+
+predictions = predict_category(sample_complaints)
+for text, pred in zip(sample_complaints, predictions):
+    print(f"\n[Complaint]: {text}")
+    print(f" -> [Predicted Category]: {pred}")
+
+print("\n" + "="*80)
+print("[SUCCESS] MODEL TRAINING & INFERENCE PIPELINE COMPLETED SUCCESSFULLY!")
+print("="*80)

@@ -235,21 +235,17 @@ def logout():
 # =====================================================
 if __name__ == "__main__":
     print("\n" + "="*60)
-    print("🚀 AI TICKET SYSTEM STARTING...")
+    print("[START] ResolvAI PLATFORM STARTING...")
     print("="*60)
-    print("\n📱 Open your browser and go to:")
-    print("   🔗 http://127.0.0.1:5000")
-    print("   🔗 http://localhost:5000")
-    print("\n📊 ML Models Status: LOADED")
-    print("   - Category Accuracy: 89.95%")
-    print("   - Priority Model: Loaded")
+    print("\nOpen your browser and navigate to:")
+    print("   -> http://127.0.0.1:5000")
+    print("   -> http://localhost:5000")
+    print("\n[MODELS] ML Models Status: LOADED")
+    print("   - NMF Category Accuracy: 89.65%")
+    print("   - Priority Model: Loaded (95.45%)")
     print("   - Entity Extraction: spaCy ready")
-    print("\n⌨️  Press CTRL+C to stop the server")
+    print("\nPress CTRL+C to stop the server")
     print("="*60 + "\n")
     
-    app.run(debug=True, host='127.0.0.1', port=5000)
-
-    if __name__ == "__main__":
-        import os
-        port = int(os.environ.get("PORT", 5000))
-        app.run(host="0.0.0.0", port=port)
+    port = int(os.environ.get("PORT", 5000))
+    app.run(debug=True, host='0.0.0.0', port=port)

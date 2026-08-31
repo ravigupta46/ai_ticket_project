@@ -63,12 +63,56 @@ body {
     gap: 0.75rem;
     text-decoration: none;
     color: var(--dark);
-    font-weight: 700;
-    font-size: 1.25rem;
+    font-weight: 800;
+    font-size: 1.35rem;
+    letter-spacing: -0.03em;
+    transition: transform 0.2s ease;
 }
 
-.logo-icon {
-    font-size: 1.75rem;
+.nav-logo a:hover {
+    transform: scale(1.02);
+}
+
+.logo-mark {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    filter: drop-shadow(0 4px 12px rgba(99, 102, 241, 0.35));
+    transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.nav-logo a:hover .logo-mark {
+    transform: rotate(6deg) scale(1.08);
+}
+
+.logo-text {
+    font-weight: 800;
+    font-size: 1.35rem;
+    letter-spacing: -0.02em;
+    color: #0f172a;
+    display: flex;
+    align-items: center;
+    gap: 2px;
+}
+
+.logo-accent {
+    background: linear-gradient(135deg, #6366f1 0%, #a855f7 50%, #ec4899 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    font-weight: 900;
+}
+
+.logo-badge {
+    font-size: 0.65rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    background: rgba(99, 102, 241, 0.1);
+    color: #4f46e5;
+    padding: 0.15rem 0.45rem;
+    border-radius: 6px;
+    margin-left: 0.35rem;
+    border: 1px solid rgba(99, 102, 241, 0.2);
 }
 
 .nav-menu {

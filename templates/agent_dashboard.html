@@ -1,11 +1,11 @@
 {% extends "base.html" %}
 
-{% block title %}Agent Dashboard - AI Ticket System{% endblock %}
+{% block title %}Agent Operations Console — ResolvAI{% endblock %}
 
 {% block content %}
 <div class="dashboard-header">
-    <h1>Agent Dashboard 👨‍💻</h1>
-    <p>Manage and monitor all support tickets</p>
+    <h1>Support Operations Console 👨‍💻</h1>
+    <p>Manage, prioritize, and resolve customer complaints with AI assistance</p>
 </div>
 
 <!-- Overview Stats -->
@@ -75,7 +75,15 @@
         <h2 class="section-title">📋 All Support Tickets</h2>
         <div>
             <button class="btn btn-secondary" onclick="exportTickets()" style="margin-right: 0.5rem;">📥 Export CSV</button>
-            <select id="priorityFilter" class="form-group" style="width: auto; display: inline-block;" onchange="filterTickets(this.value)">
+            <select id="categoryFilter" class="form-group" style="width: auto; display: inline-block; margin-right: 0.5rem;" onchange="filterTickets()">
+                <option value="all">All Categories</option>
+                <option value="Bank Account services">Bank Account services</option>
+                <option value="Credit card or prepaid card">Credit card or prepaid card</option>
+                <option value="Theft/Dispute Reporting">Theft/Dispute Reporting</option>
+                <option value="Mortgage/Loan">Mortgage/Loan</option>
+                <option value="Others">Others</option>
+            </select>
+            <select id="priorityFilter" class="form-group" style="width: auto; display: inline-block;" onchange="filterTickets()">
                 <option value="all">All Priorities</option>
                 <option value="high">High</option>
                 <option value="medium">Medium</option>
@@ -108,7 +116,7 @@
                 <td>#{{ ticket[0] }}</td>
                 <td>{{ ticket[1] }}</td>
                 <td>{{ ticket[2] }}</td>
-                <td>{{ ticket[4] }}</td>
+                <td class="ticket-category">{{ ticket[4] }}</td>
                 <td>
                     <span class="priority-badge priority-{{ ticket[5]|lower }}">
                         {{ ticket[5] }}
@@ -137,11 +145,19 @@
 </div>
 
 <script>
-function filterTickets(priority) {
+function filterTickets() {
+    const priority = document.getElementById('priorityFilter').value.toLowerCase();
+    const category = document.getElementById('categoryFilter').value;
     const rows = document.querySelectorAll('.ticket-row');
+    
     rows.forEach(row => {
-        const rowPriority = row.querySelector('.priority-badge')?.textContent.toLowerCase();
-        if (priority === 'all' || rowPriority === priority) {
+        const rowPriority = row.querySelector('.priority-badge')?.textContent.trim().toLowerCase();
+        const rowCategory = row.querySelector('.ticket-category')?.textContent.trim();
+        
+        const matchesPriority = (priority === 'all' || rowPriority === priority);
+        const matchesCategory = (category === 'all' || rowCategory === category);
+        
+        if (matchesPriority && matchesCategory) {
             row.style.display = '';
         } else {
             row.style.display = 'none';

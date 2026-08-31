@@ -3,9 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{% block title %}AI Ticket System{% endblock %}</title>
+    <title>{% block title %}ResolvAI — Intelligent Complaint Resolution{% endblock %}</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 </head>
 <body>
     <!-- Navigation Bar -->
@@ -13,8 +13,21 @@
         <div class="nav-container">
             <div class="nav-logo">
                 <a href="/">
-                    <span class="logo-icon">🎫</span>
-                    <span class="logo-text">AI Ticket System</span>
+                    <div class="logo-mark">
+                        <svg width="30" height="30" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <defs>
+                                <linearGradient id="logoGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                                    <stop offset="0%" stop-color="#4f46e5" />
+                                    <stop offset="50%" stop-color="#7c3aed" />
+                                    <stop offset="100%" stop-color="#ec4899" />
+                                </linearGradient>
+                            </defs>
+                            <rect width="32" height="32" rx="9" fill="url(#logoGrad)" />
+                            <path d="M10 16.5L14 20.5L22 11.5" stroke="white" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>
+                            <circle cx="21.5" cy="11.5" r="2.2" fill="#38bdf8" />
+                        </svg>
+                    </div>
+                    <span class="logo-text">Resolv<span class="logo-accent">AI</span><span class="logo-badge">PRO</span></span>
                 </a>
             </div>
             
