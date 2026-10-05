@@ -1,6 +1,7 @@
 # database.py (FIXED)
 import sqlite3
 from datetime import datetime
+from werkzeug.security import generate_password_hash, check_password_hash
 
 def init_db():
     conn = sqlite3.connect("users.db")
@@ -44,6 +45,15 @@ def init_db():
     except sqlite3.OperationalError:
         pass  # Column already exists
 
+    # Migrate any plain text passwords to secure password hashes
+    try:
+        c.execute("SELECT id, password FROM users")
+        for user_id, pwd in c.fetchall():
+            if pwd and not (pwd.startswith("scrypt:") or pwd.startswith("pbkdf2:") or pwd.startswith("argon2:")):
+                c.execute("UPDATE users SET password = ? WHERE id = ?", (generate_password_hash(pwd), user_id))
+    except sqlite3.OperationalError:
+        pass
+
     conn.commit()
     conn.close()
     print("[OK] Database initialized successfully")
@@ -54,6 +64,52 @@ def get_db():
     conn = sqlite3.connect("users.db")
     conn.row_factory = sqlite3.Row
     return conn
+
+def create_user(username, password, role):
+    """Register a new user with hashed password"""
+    conn = get_db()
+    c = conn.cursor()
+    hashed_password = generate_password_hash(password)
+    try:
+        c.execute(
+            "INSERT INTO users (username, password, role) VALUES (?, ?, ?)",
+            (username, hashed_password, role)
+        )
+        conn.commit()
+        return True, "Registration successful! Please login."
+    except sqlite3.IntegrityError:
+        return False, "Username already exists!"
+    finally:
+        conn.close()
+
+def authenticate_user(username, password):
+    """Authenticate user with hashed password (supports automatic legacy password upgrade)"""
+    conn = get_db()
+    c = conn.cursor()
+    c.execute("SELECT password, role FROM users WHERE username = ?", (username,))
+    user = c.fetchone()
+    
+    if not user:
+        conn.close()
+        return None
+        
+    stored_password = user["password"]
+    role = user["role"]
+    
+    if check_password_hash(stored_password, password):
+        conn.close()
+        return {"username": username, "role": role}
+    elif stored_password == password:
+        # Transparently upgrade legacy plaintext password to secure hash
+        new_hash = generate_password_hash(password)
+        c.execute("UPDATE users SET password = ? WHERE username = ?", (new_hash, username))
+        conn.commit()
+        conn.close()
+        return {"username": username, "role": role}
+        
+    conn.close()
+    return None
+
 # Function to create a new ticket
 # database.py - Update the create_ticket function
 

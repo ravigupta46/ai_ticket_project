@@ -1,7 +1,17 @@
 # app.py (UPDATED with better startup messages)
 from flask import Flask, render_template, request, redirect, session, flash, jsonify
 import sqlite3
-from database import init_db, create_ticket, get_user_tickets, get_all_tickets, get_ticket_by_id, update_ticket_status, get_ticket_stats
+from database import (
+    init_db,
+    create_ticket,
+    get_user_tickets,
+    get_all_tickets,
+    get_ticket_by_id,
+    update_ticket_status,
+    get_ticket_stats,
+    create_user,
+    authenticate_user
+)
 from ai_engine.ticket_generator import generate_ticket
 import os
 from datetime import datetime
@@ -30,26 +40,17 @@ def login():
         session.clear()
 
     if request.method == "POST":
-        username = request.form["username"]
+        username = request.form["username"].strip()
         password = request.form["password"]
 
-        conn = sqlite3.connect("users.db")
-        c = conn.cursor()
-
-        c.execute(
-            "SELECT role FROM users WHERE username=? AND password=?",
-            (username, password)
-        )
-
-        user = c.fetchone()
-        conn.close()
+        user = authenticate_user(username, password)
 
         if user:
-            session["role"] = user[0]
-            session["username"] = username
+            session["role"] = user["role"]
+            session["username"] = user["username"]
             flash(f"Welcome back, {username}!", "success")
 
-            if user[0] == "user":
+            if user["role"] == "user":
                 return redirect("/user_dashboard")
             else:
                 return redirect("/agent_dashboard")
@@ -64,25 +65,20 @@ def login():
 @app.route("/register", methods=["GET", "POST"])
 def register():
     if request.method == "POST":
-        username = request.form["username"]
+        username = request.form["username"].strip()
         password = request.form["password"]
         role = request.form["role"]
 
-        conn = sqlite3.connect("users.db")
-        c = conn.cursor()
+        if not username or not password or not role:
+            flash("All fields are required!", "error")
+            return render_template("register.html")
 
-        try:
-            c.execute(
-                "INSERT INTO users(username, password, role) VALUES(?,?,?)",
-                (username, password, role)
-            )
-            conn.commit()
-            flash("Registration successful! Please login.", "success")
+        success, message = create_user(username, password, role)
+        if success:
+            flash(message, "success")
             return redirect("/login")
-        except sqlite3.IntegrityError:
-            flash("Username already exists!", "error")
-        finally:
-            conn.close()
+        else:
+            flash(message, "error")
 
     return render_template("register.html")
 
