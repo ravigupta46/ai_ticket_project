@@ -13,22 +13,30 @@ logger = logging.getLogger(__name__)
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 MODEL_DIR = os.path.join(BASE_DIR, 'model')
 
+# Canonical customer support categories aligned with Customer_support_data.csv
 CATEGORY_MAPPING = {
-    0: 'Bank Account services',
-    1: 'Credit card or prepaid card',
-    2: 'Others',
-    3: 'Theft/Dispute Reporting',
-    4: 'Mortgage/Loan',
-    '0': 'Bank Account services',
-    '1': 'Credit card or prepaid card',
-    '2': 'Others',
-    '3': 'Theft/Dispute Reporting',
-    '4': 'Mortgage/Loan',
-    'Bank Account services': 'Bank Account services',
-    'Credit card or prepaid card': 'Credit card or prepaid card',
-    'Theft/Dispute Reporting': 'Theft/Dispute Reporting',
-    'Mortgage/Loan': 'Mortgage/Loan',
-    'Others': 'Others'
+    'Product Queries': 'Product Queries',
+    'Returns': 'Returns',
+    'Order Related': 'Order Related',
+    'Refund Related': 'Refund Related',
+    'Payments related': 'Payments related',
+    'Cancellation': 'Cancellation',
+    'Shopzilla Related': 'Shopzilla Related',
+    'Feedback': 'Feedback',
+    'Offers & Cashback': 'Offers & Cashback',
+    'App/website': 'App/website',
+    'Onboarding related': 'Onboarding related',
+    'Others': 'Others',
+    # Legacy fallbacks
+    'Bank Account services': 'Product Queries',
+    'Credit card or prepaid card': 'Payments related',
+    'Theft/Dispute Reporting': 'Returns',
+    'Mortgage/Loan': 'Order Related',
+    0: 'Product Queries',
+    1: 'Returns',
+    2: 'Order Related',
+    3: 'Refund Related',
+    4: 'Payments related'
 }
 
 class AITicketGenerator:
@@ -55,7 +63,7 @@ class AITicketGenerator:
                     self.category_model = pickle.load(f)
                 with open(vectorizer_file, 'rb') as f:
                     self.vectorizer = pickle.load(f)
-                logger.info("[OK] Category model & vectorizer loaded successfully")
+                logger.info("[OK] Customer support category model & vectorizer loaded successfully")
 
             # Load Priority Model & Vectorizer
             if os.path.exists(priority_model_file) and os.path.exists(priority_vectorizer_file):
@@ -70,9 +78,12 @@ class AITicketGenerator:
                 self.nlp = spacy.load("en_core_web_sm")
                 logger.info("[OK] spaCy NER model loaded")
             except Exception:
-                import subprocess
-                subprocess.run(["python", "-m", "spacy", "download", "en_core_web_sm"])
-                self.nlp = spacy.load("en_core_web_sm")
+                try:
+                    import subprocess
+                    subprocess.run(["python", "-m", "spacy", "download", "en_core_web_sm"], check=True)
+                    self.nlp = spacy.load("en_core_web_sm")
+                except Exception as ex:
+                    logger.warning(f"Could not load spaCy: {ex}")
 
             if self.category_model is not None and self.vectorizer is not None:
                 self.models_loaded = True
@@ -91,12 +102,11 @@ class AITicketGenerator:
         text = str(text).lower()
         text = re.sub(r'\[.*?\]', ' ', text)
         text = re.sub(r'[^\w\s]', ' ', text)
-        text = re.sub(r'\w*\d\w*', ' ', text)
         text = re.sub(r'\s+', ' ', text).strip()
         return text
 
     def extract_entities(self, text):
-        """Extract financial entities, organizations, money amounts, dates, and account/error codes"""
+        """Extract domain entities: products, order IDs, money amounts, dates, error codes"""
         entities = {
             'error_codes': [],
             'organizations': [],
@@ -105,33 +115,59 @@ class AITicketGenerator:
             'products': []
         }
 
-        if self.nlp:
-            doc = self.nlp(text)
-            for ent in doc.ents:
-                if ent.label_ == 'ORG':
-                    entities['organizations'].append(ent.text)
-                elif ent.label_ == 'DATE':
-                    entities['dates'].append(ent.text)
-                elif ent.label_ == 'MONEY':
-                    entities['amounts'].append(ent.text)
-                elif ent.label_ == 'PRODUCT':
-                    entities['products'].append(ent.text)
-
-        # Regex patterns for reference codes, transaction IDs, account numbers
-        ref_patterns = [
-            r'\b[A-Z0-9]{6,16}\b',
-            r'\b\$\s?\d+(?:,\d{3})*(?:\.\d{2})?\b',
-            r'\b\d{4}[-\s]?\d{4}[-\s]?\d{4}\b'
+        # 1. Product detection
+        common_products = [
+            'laptop', 'computer', 'pc', 'desktop', 'macbook', 'notebook',
+            'mobile', 'phone', 'smartphone', 'iphone', 'android', 'tablet', 'ipad',
+            'television', 'tv', 'led tv', 'oled tv', 'monitor', 'display', 'screen',
+            'headphones', 'earphones', 'airpods', 'earbuds', 'speaker', 'soundbar',
+            'watch', 'smartwatch', 'camera', 'dslr', 'lens',
+            'keyboard', 'mouse', 'charger', 'adapter', 'cable', 'hard disk', 'ssd', 'ram',
+            'refrigerator', 'fridge', 'washing machine', 'microwave', 'ac', 'air conditioner',
+            'shoes', 'shirt', 'dress', 'jeans', 'tshirt', 'jacket', 't-shirt'
         ]
-        for pattern in ref_patterns:
-            matches = re.findall(pattern, text)
-            for m in matches:
-                if '$' in m:
-                    entities['amounts'].append(m)
-                elif len(m) >= 6:
-                    entities['error_codes'].append(m)
+        text_lower = text.lower()
+        for prod in common_products:
+            if re.search(r'\b' + re.escape(prod) + r'\b', text_lower):
+                entities['products'].append(prod.capitalize())
 
-        # Deduplicate and limit
+        # 2. Extract with spaCy if available
+        if self.nlp:
+            try:
+                doc = self.nlp(text)
+                for ent in doc.ents:
+                    if ent.label_ == 'ORG' and ent.text.lower() not in [p.lower() for p in entities['products']]:
+                        entities['organizations'].append(ent.text)
+                    elif ent.label_ == 'DATE':
+                        entities['dates'].append(ent.text)
+                    elif ent.label_ == 'MONEY':
+                        entities['amounts'].append(ent.text)
+                    elif ent.label_ == 'PRODUCT':
+                        entities['products'].append(ent.text)
+            except Exception:
+                pass
+
+        # 3. Regex patterns for Order IDs, reference codes, currency amounts
+        order_patterns = [
+            r'#\s?([A-Za-z0-9]{5,15})\b',
+            r'\b(?:order|ord|ticket|txn|id)[-:\s#]+([A-Za-z0-9]{4,15})\b',
+            r'\b[A-Z]{2,4}[-_]?\d{4,10}\b'
+        ]
+        for pattern in order_patterns:
+            matches = re.findall(pattern, text, re.IGNORECASE)
+            for m in matches:
+                entities['error_codes'].append(m if isinstance(m, str) else m[0])
+
+        currency_patterns = [
+            r'(?:Rs\.?|INR|\$|€|£)\s?\d+(?:,\d{3})*(?:\.\d{2})?',
+            r'\b\d+(?:,\d{3})*(?:\.\d{2})?\s?(?:rupees|dollars|inr|usd)\b'
+        ]
+        for pattern in currency_patterns:
+            matches = re.findall(pattern, text, re.IGNORECASE)
+            for m in matches:
+                entities['amounts'].append(m)
+
+        # Deduplicate and limit to 5 per list
         for k in entities:
             entities[k] = list(dict.fromkeys(entities[k]))[:5]
 
@@ -139,8 +175,10 @@ class AITicketGenerator:
 
     def generate_title(self, text):
         """Generate a concise, professional title from complaint text"""
+        if not text:
+            return "Support Ticket"
         sentences = re.split(r'[.!?\n]', text)
-        first_sentence = sentences[0].strip() if sentences else text[:60]
+        first_sentence = sentences[0].strip() if sentences and sentences[0].strip() else text[:60]
         
         if len(first_sentence) > 75:
             title = first_sentence[:75].rsplit(' ', 1)[0] + '...'
@@ -152,8 +190,148 @@ class AITicketGenerator:
             title += '...'
         return title
 
+    def rule_based_category(self, text):
+        """
+        High-precision rule-based category classifier based on customer support data.
+        Maps requests to one of the 12 canonical customer support categories:
+        - Product Queries
+        - Returns
+        - Order Related
+        - Refund Related
+        - Payments related
+        - Cancellation
+        - Shopzilla Related
+        - Feedback
+        - Offers & Cashback
+        - App/website
+        - Onboarding related
+        - Others
+        """
+        t = text.lower()
+
+        # 1. Shopzilla Account & Access (Login, signup, password, OTP, profile)
+        if any(w in t for w in [
+            'login', 'log in', 'signup', 'sign up', 'password reset', 'forgot password',
+            'password', 'otp not received', 'update phone', 'update email', 'account deactivation',
+            'shopzilla premium', 'membership', 'rewards points'
+        ]):
+            return 'Shopzilla Related'
+
+        # 2. Others / Call requests
+        if any(w in t for w in ['call me back', 'call back request', 'call disconnected', 'callback']):
+            return 'Others'
+
+        # 3. App/website (App crash, bug, website not opening)
+        if any(w in t for w in [
+            'app crash', 'app is crashing', 'crashes', 'website not loading',
+            'app not opening', 'app freezing', 'bug in app', 'glitch on website',
+            'ui error', 'error page', 'checkout crash'
+        ]):
+            return 'App/website'
+
+        # 4. Offers & Cashback (Discounts, coupons, promo codes)
+        if any(w in t for w in [
+            'cashback', 'coupon', 'promo code', 'discount code', 'affiliate offer',
+            'instant discount', 'voucher code', 'offer not applied'
+        ]):
+            return 'Offers & Cashback'
+
+        # 5. Cancellation (Cancel order, stop shipment, not needed)
+        if any(w in t for w in [
+            'cancel order', 'cancellation', 'cancel my order', 'stop delivery',
+            'not needed anymore', "don't want the product", 'ordered by mistake',
+            'cancel shipment'
+        ]):
+            return 'Cancellation'
+
+        # 6. Refund Related (Money refund, bank credit, COD refund)
+        if any(w in t for w in [
+            'refund', 'money back', 'amount not credited', 'cod refund',
+            'refund status', 'refund pending', 'return payment', 'reimbursement',
+            'where is my refund', 'refund not received'
+        ]):
+            return 'Refund Related'
+
+        # 7. Payments related (Payment failed, debited, wallet, EMI, cards)
+        if any(w in t for w in [
+            'payment', 'money debited', 'money deducted', 'debited twice',
+            'deducted twice', 'payment failed', 'transaction failed',
+            'emi', 'paylater', 'pay later', 'wallet balance', 'net banking',
+            'gateway error', 'billing error', 'double charged'
+        ]):
+            return 'Payments related'
+
+        # 8. Returns (Defective/damaged product return, replacement, reverse pickup)
+        if any(w in t for w in [
+            'return', 'replace', 'replacement', 'exchange', 'reverse pickup',
+            'wrong product', 'wrong item', 'damaged product', 'damaged item',
+            'broken item', 'missing item', 'missing parts', 'technician visit',
+            'defective product received', 'damaged parcel', 'exchange size'
+        ]):
+            return 'Returns'
+
+        # 9. Feedback (Agent behaviour, rude delivery person, complaint on staff)
+        if any(w in t for w in [
+            'rude', 'abusive', 'behaviour', 'behavior', 'misbehaved',
+            'unprofessional', 'delivery boy misbehaved', 'agent shouted',
+            'pathetic customer support', 'worst executive'
+        ]):
+            return 'Feedback'
+
+        # 10. Onboarding related (Seller registration, merchant)
+        if any(w in t for w in [
+            'seller onboarding', 'sell on shopzilla', 'merchant registration',
+            'seller account', 'seller commission', 'gst verification'
+        ]):
+            return 'Onboarding related'
+
+        # 11. Order Related (Order tracking, delayed delivery, invoice, installation)
+        if any(w in t for w in [
+            'delay', 'delayed', 'where is my order', 'order status', 'tracking',
+            'track my package', 'courier', 'delivery boy', 'delivery date',
+            'not delivered', 'dispatched', 'installation', 'demo', 'invoice copy',
+            'bill copy', 'seller cancelled'
+        ]):
+            return 'Order Related'
+
+        # 12. Product Queries (Hardware defect, overheating, display, specs, compatibility, warranty)
+        hardware_symptoms = [
+            'heating', 'overheating', 'heat up', 'heat', 'display not visible',
+            'screen blank', 'screen is blank', 'display blank', 'screen not working',
+            'not working', 'flickering', 'fan noise', 'motherboard', 'battery draining',
+            'battery not charging', 'keyboard not working', 'camera not working',
+            'touch not working', 'sound not coming', 'bluetooth not connecting',
+            'wont turn on', "won't turn on", 'shut down automatically',
+            'powers off', 'black screen', 'blue screen', 'ram upgrade', 'compatibility',
+            'warranty period', 'claim warranty', 'user manual', 'product specification',
+            'specifications', 'specs', 'warranty', 'guarantee'
+        ]
+        hardware_devices = [
+            'laptop', 'computer', 'screen', 'display', 'mobile', 'phone', 'tv',
+            'monitor', 'device', 'smartwatch', 'keyboard', 'camera', 'speaker',
+            'headphone', 'charger', 'pc', 'tablet'
+        ]
+        
+        if any(s in t for s in hardware_symptoms) or any(d in t for d in hardware_devices):
+            return 'Product Queries'
+
+        return 'Others'
+
     def predict_category(self, text):
-        """Predict one of the 5 financial complaint categories"""
+        """
+        Predict one of the 12 customer support categories:
+        Combines domain intent disambiguation with trained TF-IDF classifier.
+        """
+        t = str(text).lower()
+        if any(w in t for w in ['call me back', 'call back request', 'call disconnected', 'callback']):
+            return 'Others'
+
+        # 1. First check deterministic high-confidence rules
+        rule_cat = self.rule_based_category(text)
+        if rule_cat != 'Others':
+            return rule_cat
+
+        # 2. Use trained ML model if available
         if self.models_loaded and self.category_model is not None and self.vectorizer is not None:
             try:
                 vec = self.vectorizer.transform([text])
@@ -162,17 +340,37 @@ class AITicketGenerator:
                 return category_name
             except Exception as e:
                 logger.error(f"Inference error in category prediction: {e}")
-                return self.rule_based_category(text)
-        return self.rule_based_category(text)
+                return rule_cat
+
+        return rule_cat
 
     def predict_priority(self, text):
-        """Predict Priority (High, Medium, Low)"""
-        # Always check high urgency critical keywords first
+        """Predict Priority (High, Medium, Low) based on customer urgency"""
         text_lower = text.lower()
-        urgent_keywords = ['urgent', 'emergency', 'fraud', 'stolen', 'unauthorized', 'skimming', 'critical', 'immediately']
-        if any(w in text_lower for w in urgent_keywords):
+
+        # High urgency: safety, fraud, severe heating, legal escalation
+        critical_high = [
+            'fire', 'smoke', 'shock', 'electric', 'blast', 'exploded',
+            'burst', 'heating very badly', 'overheating badly',
+            'urgent', 'emergency', 'asap', 'critical', 'immediately',
+            'fraud', 'stolen', 'unauthorized', 'theft', 'skimming',
+            'consumer court', 'police', 'legal notice', 'lawsuit',
+            'abusive', 'harassment'
+        ]
+        if any(w in text_lower for w in critical_high):
             return 'High'
 
+        # Medium urgency: product not working, heating, display, delay, refund pending
+        critical_medium = [
+            'not working', 'heating', 'display not visible', 'screen blank',
+            'flickering', 'broken', 'damaged', 'defective', 'wrong product',
+            'delayed', 'refund pending', 'payment failed', 'money debited',
+            'missing item', 'app crash'
+        ]
+        if any(w in text_lower for w in critical_medium):
+            return 'Medium'
+
+        # Check trained priority model
         if self.priority_model is not None and self.priority_vectorizer is not None:
             try:
                 vec = self.priority_vectorizer.transform([text])
@@ -180,32 +378,8 @@ class AITicketGenerator:
                 return str(pred)
             except Exception as e:
                 logger.error(f"Inference error in priority prediction: {e}")
-                return self.rule_based_priority(text)
-        return self.rule_based_priority(text)
 
-    def rule_based_category(self, text):
-        """Rule-based fallback for the 5 financial complaint categories"""
-        t = text.lower()
-        if any(w in t for w in ['mortgage', 'loan', 'escrow', 'refinance', 'payoff', 'foreclosure', 'lender', 'home loan', 'property tax']):
-            return 'Mortgage/Loan'
-        elif any(w in t for w in ['credit card', 'prepaid card', 'card limit', 'annual fee', 'late fee', 'visa', 'mastercard', 'amex', 'cashback']):
-            return 'Credit card or prepaid card'
-        elif any(w in t for w in ['fraud', 'theft', 'unauthorized', 'scam', 'stolen', 'skimming', 'dispute', 'identity theft', 'fake']):
-            return 'Theft/Dispute Reporting'
-        elif any(w in t for w in ['bank', 'checking', 'saving', 'account', 'deposit', 'withdrawal', 'branch', 'atm', 'wire transfer', 'overdraft']):
-            return 'Bank Account services'
-        else:
-            return 'Others'
-
-    def rule_based_priority(self, text):
-        """Rule-based priority fallback"""
-        t = text.lower()
-        if any(w in t for w in ['urgent', 'fraud', 'stolen', 'unauthorized', 'emergency', 'immediately', 'critical', 'lawsuit']):
-            return 'High'
-        elif any(w in t for w in ['problem', 'issue', 'delay', 'dispute', 'wrong', 'error', 'fee', 'charge']):
-            return 'Medium'
-        else:
-            return 'Low'
+        return 'Low'
 
     def generate_ticket(self, text):
         """Complete structured ticket generation pipeline"""
@@ -239,4 +413,4 @@ ai_generator = AITicketGenerator()
 
 def generate_ticket(text):
     """Entry point for ticket generation"""
-    return ai_generator.generate_ticket(text)
+    return ai_generator.generate_ticket(text)

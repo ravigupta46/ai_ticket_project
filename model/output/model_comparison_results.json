@@ -1,0 +1,26 @@
+{
+    "Logistic Regression": {
+        "Accuracy": 0.2892,
+        "Precision": 0.4391,
+        "Recall": 0.2892,
+        "F1 Score": 0.3399
+    },
+    "Decision Tree": {
+        "Accuracy": 0.049,
+        "Precision": 0.4073,
+        "Recall": 0.049,
+        "F1 Score": 0.0394
+    },
+    "Random Forest": {
+        "Accuracy": 0.2394,
+        "Precision": 0.4054,
+        "Recall": 0.2394,
+        "F1 Score": 0.2859
+    },
+    "Multinomial Naive Bayes": {
+        "Accuracy": 0.5249,
+        "Precision": 0.4525,
+        "Recall": 0.5249,
+        "F1 Score": 0.4339
+    }
+}
