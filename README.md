@@ -1,115 +1,137 @@
-# ResolvAI — Intelligent Complaint Resolution & Topic Modeling Platform
+# ResolvAI — Intelligent Customer Support Ticket Triage Platform
 
-An end-to-end Machine Learning and NLP platform designed to automatically categorize financial customer complaints, extract crucial entities, assign priority levels, and streamline support workflows using NMF topic modeling and supervised classification.
-
----
-
-## 📌 Problem Statement & Overview
-
-Customer support complaints across financial services and banking products are often received in unlabelled natural language. This project applies **Non-Negative Matrix Factorization (NMF)** for unsupervised topic discovery and builds **Supervised Machine Learning Classifiers** to automatically classify complaints into five core product/service departments:
-
-1. 💳 **Credit card / Prepaid card**
-2. 🏦 **Bank account services**
-3. 🚨 **Theft/Dispute reporting**
-4. 🏠 **Mortgages/loans**
-5. 🌐 **Others**
+ResolvAI is an end-to-end Machine Learning and Flask web platform designed to automatically triage, categorize, and prioritize customer support complaints. It combines deterministic word-boundary regex rules, supervised machine learning pipelines, and entity extraction to streamline support workflows.
 
 ---
 
-## 🛠️ Complete 8-Stage NLP Pipeline
+## 📌 Architecture & Design
 
-1. **Data Loading**: Load complaints data (`complaints-2021-05-14_08_16.json` / CSV fallback) and normalize nested JSON fields.
-2. **Text Preprocessing**: Lowercasing, regex cleaning (remove square brackets, punctuation, words with numbers), lemmatization with spaCy stop words, POS filtering (`NN` only), and cleaning of `-PRON-` and masked text (`xxxx`).
-3. **Exploratory Data Analysis (EDA)**: Character length distribution and top N-gram frequencies (unigrams, bigrams, trigrams).
-4. **Feature Extraction**: TF-IDF Document-Term Matrix transformation (`max_df=0.98`, `min_df=2`, `stop_words='english'`).
-5. **Topic Modeling (NMF)**: 5-cluster NMF topic extraction, top keyword inspection, and business category mapping.
-6. **Supervised Model Building**: Stratified training setup with CountVectorizer + TfidfTransformer.
-7. **Model Training & Evaluation**: Comparison of Logistic Regression, Decision Tree, Random Forest, Multinomial Naive Bayes, and XGBoost with Weighted F1, Accuracy, Precision, Recall, and ROC AUC metrics.
-8. **Model Inference & Production Deployment**: Integration into a full-stack Flask web application with real-time prediction and spaCy Named Entity Recognition (NER).
+ResolvAI employs a **hybrid inference** architecture:
+1. **Deterministic Rule Engine First**: High-precision, compiled word-boundary regular expressions evaluate queries against domain signatures. Rule 12 (`Product Queries`) strictly requires both hardware symptoms and device keywords so it does not swallow general inquiries.
+2. **Supervised ML Fallback**: If rules return `Others`, queries are evaluated by an end-to-end `sklearn.pipeline.Pipeline` (TF-IDF Vectorizer + Classifier) trained on customer support remarks.
+3. **Human-in-the-Loop Preview**: Users submit natural-language issues, review AI-generated titles, categories, priorities, and extracted entities in `preview_ticket.html`, and confirm before tickets are persisted.
+4. **Security & State Management**: CSRF protection on all POST forms and AJAX status calls, hashed passwords via Werkzeug, secure session cookies (30-min lifetime), and server-side recomputation of entities on ticket confirmation.
 
 ---
 
-## 📁 Project Directory Structure
+## 🏷️ Canonical Taxonomy (12 Categories)
+
+1. **Product Queries** (Hardware issues, specifications, warranty)
+2. **Returns** (Damaged product, reverse pickup, replacement)
+3. **Order Related** (Tracking, delivery delays, invoice requests)
+4. **Refund Related** (Bank credit, COD refunds, refund status)
+5. **Payments related** (Gateway errors, double debits, wallet/EMI)
+6. **Cancellation** (Order cancellation, stopping delivery)
+7. **Shopzilla Related** (Account access, login, OTP, profile)
+8. **Feedback** (Agent demeanor, delivery feedback)
+9. **Offers & Cashback** (Coupons, promo codes, wallet cashback)
+10. **App/website** (App crashes, website loading bugs)
+11. **Onboarding related** (Merchant/seller registration, commission)
+12. **Others** (General inquiries, callback requests)
+
+---
+
+## 📊 Honest Evaluation Metrics (`model/output/metrics.json`)
+
+All accuracy figures in the project are derived strictly from `model/output/metrics.json`. The test set consists of real, held-out, deduplicated customer remarks (no synthetic or domain-phrase leakage in test):
+
+| Metric Component | Model / Method | Accuracy | Weighted F1 | Notes |
+|------------------|----------------|----------|-------------|-------|
+| **Category (ML-Only)** | Multinomial Naive Bayes | **54.34%** | **0.4587** | Evaluated on 3,344 real held-out customer remarks |
+| **Category (Hybrid)** | Regex Rules + ML Fallback | **52.15%** | **0.4572** | Rules resolve 14.65% of test queries; 85.35% fall back to ML |
+| **Priority Model** | Random Forest Pipeline | **94.81%** | **0.9466** | **Weak-label (rule-derived), not human-verified** |
+
+> **Note on Priority Labels:** Ground-truth human annotations were not available in the dataset; priority labels are derived from shared urgency keywords (weak supervision). A documented hook `load_priority_dataset(custom_path)` is provided in `model/priority_model.py` to seamlessly ingest human-verified labels.
+
+---
+
+## 📁 Repository Structure
 
 ```text
 ai_ticket_project/
-├── Automatic_Ticket_Classification.ipynb  # Interactive 8-stage pipeline Jupyter notebook
-├── app.py                                # Main Flask web application
-├── database.py                           # SQLite ticket and user management
-├── reset_db.py                           # Database reset utility
-├── requirements.txt                      # Project dependencies
+├── app.py                     # Flask application (CSRF, sessions, validation, routes)
+├── database.py                # SQLite persistence, migrations, password hashing
+├── reset_db.py                # Database reset and development account seeding
+├── requirements.txt           # Minimal, clean runtime dependencies
+├── build.sh                   # Deployment build script (spaCy download)
+├── render.yaml                # Render cloud deployment specification
 ├── ai_engine/
-│   └── ticket_generator.py               # AI inference engine & NER entity extractor
-├── preprocessing/
-│   └── text_preprocessing.py             # Data loading & NLP text cleaning pipeline
+│   ├── config.py              # Single source of truth for categories, priorities & compiled regex
+│   ├── rules.py               # Deterministic regex rule evaluation
+│   └── ticket_generator.py    # Hybrid inference engine & entity extractor (singleton)
 ├── model/
-│   ├── eda.py                            # EDA analysis (character lengths & N-grams)
-│   ├── topic_modelling_nmf.py            # Feature extraction & NMF topic modeling
-│   ├── train_category_model.py           # Supervised classifier training & evaluation
-│   ├── priority_model.py                 # Random Forest priority classifier
-│   └── output/                           # Trained artifacts & metrics
-│       ├── cleaned_tickets.csv
-│       ├── training_data.csv
-│       ├── category_accuracy.txt
-│       └── priority_accuracy.txt
-├── templates/                            # Web application UI templates
-│   ├── landing.html
-│   ├── login.html
-│   ├── register.html
-│   ├── user_dashboard.html
-│   ├── agent_dashboard.html
-│   ├── create_ticket.html
-│   ├── preview_ticket.html
-│   └── ticket_details.html
-├── static/
-│   ├── css/style.css
-│   └── js/main.js
-└── data/
-    └── Customer_support_data.csv
+│   ├── data/
+│   │   └── domain_phrases.json  # Hand-curated domain phrases for training oversampling
+│   ├── train_category_model.py  # Stratified training pipeline & metrics generator
+│   ├── priority_model.py        # Weak-supervision priority classifier pipeline
+│   ├── topic_modelling_nmf.py   # Unsupervised NMF topic analysis
+│   ├── eda.py                   # Exploratory data analysis
+│   └── output/
+│       ├── metrics.json         # Single source of truth for all project metrics
+│       ├── training_data.csv    # Curated training data
+│       └── model_comparison_results.json
+├── templates/                 # Jinja2 HTML templates
+├── static/                    # CSS stylesheets and client-side JavaScript
+└── tests/
+    └── test_engine.py         # Pytest verification suite
 ```
 
 ---
 
-## 🚀 How to Run the Project
+## 🚀 Getting Started
 
-### 1. Environment Setup
+### 1. Installation
 ```bash
-# Clone repository and navigate to directory
+# Clone the repository
+git clone <repo-url>
 cd ai_ticket_project
 
 # Install dependencies
 pip install -r requirements.txt
 
-# Download spaCy English model
+# Download spaCy English NER model
 python -m spacy download en_core_web_sm
 ```
 
-### 2. Execute the NLP & Machine Learning Pipelines
+### 2. Run Training Pipeline (Offline)
 ```bash
-# Step 1 & 2: Text Preprocessing & Cleaning
-python preprocessing/text_preprocessing.py
-
-# Step 3: Exploratory Data Analysis (EDA)
-python model/eda.py
-
-# Step 4 & 5: Feature Extraction & NMF Topic Modeling
-python model/topic_modelling_nmf.py
-
-# Step 6, 7 & 8: Supervised Model Training, Evaluation & Inference
+# Train category classifier, select best model, and produce metrics.json
 python model/train_category_model.py
 
-# Priority Model Training
+# Train priority pipeline with weak labels
 python model/priority_model.py
+
+# Run optional unsupervised topic modeling & EDA
+python model/topic_modelling_nmf.py
+python model/eda.py
 ```
 
-### 3. Launch the Web Application
+### 3. Initialize Database & Seed Development Users
 ```bash
-python app.py
+python reset_db.py
 ```
-Open your browser at `http://127.0.0.1:5000` or `http://localhost:5000`.
+*Development seed accounts:*
+- **User:** `demo_user` / `password123`
+- **Agent:** `demo_agent` / `password123`
+
+### 4. Run Web Application
+```bash
+# Local development run
+python app.py
+
+# Production run with Gunicorn
+gunicorn app:app
+```
+Access the application at `http://127.0.0.1:5000`.
 
 ---
 
-## 📊 Default Demo Accounts
-- **User Portal**: `username: user` | `password: user123`
-- **Agent Portal**: `username: agent` | `password: agent123`
+## 🔒 Security & Environment Variables
+
+| Variable | Default | Purpose |
+|----------|---------|---------|
+| `SECRET_KEY` | Random in prod / dev fallback | Flask session cryptographic signature |
+| `FLASK_DEBUG` | `0` (False) | Enables debug mode (never enable in production) |
+| `HOST` | `127.0.0.1` | Network binding interface |
+| `PORT` | `5000` | Port for the HTTP server |
+| `PRIORITY_DATA_PATH` | None | Optional path to human-verified priority dataset |

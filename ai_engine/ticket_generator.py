@@ -1,112 +1,129 @@
-# ai_engine/ticket_generator.py
+"""ai_engine/ticket_generator.py
+Hybrid ticket triage engine: regex rules -> ML pipeline fallback -> entity extraction.
+Maintains public API: generate_ticket(text) -> {title, description, category, priority, entities, ml_used}.
+"""
 import os
 import re
 import pickle
 import logging
-import spacy
-import numpy as np
+from typing import Dict, Any
 
-# Set up logging
-logging.basicConfig(level=logging.INFO)
+from ai_engine.config import ALLOWED_CATEGORIES, ALLOWED_PRIORITIES
+from ai_engine.rules import rule_based_category, rule_based_priority
+
 logger = logging.getLogger(__name__)
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 MODEL_DIR = os.path.join(BASE_DIR, 'model')
 
-# Canonical customer support categories aligned with Customer_support_data.csv
-CATEGORY_MAPPING = {
-    'Product Queries': 'Product Queries',
-    'Returns': 'Returns',
-    'Order Related': 'Order Related',
-    'Refund Related': 'Refund Related',
-    'Payments related': 'Payments related',
-    'Cancellation': 'Cancellation',
-    'Shopzilla Related': 'Shopzilla Related',
-    'Feedback': 'Feedback',
-    'Offers & Cashback': 'Offers & Cashback',
-    'App/website': 'App/website',
-    'Onboarding related': 'Onboarding related',
-    'Others': 'Others',
-    # Legacy fallbacks
-    'Bank Account services': 'Product Queries',
-    'Credit card or prepaid card': 'Payments related',
-    'Theft/Dispute Reporting': 'Returns',
-    'Mortgage/Loan': 'Order Related',
-    0: 'Product Queries',
-    1: 'Returns',
-    2: 'Order Related',
-    3: 'Refund Related',
-    4: 'Payments related'
-}
+COMMON_PRODUCTS = [
+    'laptop', 'computer', 'pc', 'desktop', 'macbook', 'notebook',
+    'mobile', 'phone', 'smartphone', 'iphone', 'android', 'tablet', 'ipad',
+    'television', 'tv', 'led tv', 'oled tv', 'monitor', 'display', 'screen',
+    'headphones', 'earphones', 'airpods', 'earbuds', 'speaker', 'soundbar',
+    'watch', 'smartwatch', 'camera', 'dslr', 'lens',
+    'keyboard', 'mouse', 'charger', 'adapter', 'cable', 'hard disk', 'ssd', 'ram',
+    'refrigerator', 'fridge', 'washing machine', 'microwave', 'ac', 'air conditioner',
+    'shoes', 'shirt', 'dress', 'jeans', 'tshirt', 'jacket', 't-shirt'
+]
+PRODUCT_REGEX = re.compile(
+    r'\b(?:' + '|'.join(re.escape(p) for p in sorted(COMMON_PRODUCTS, key=len, reverse=True)) + r')\b',
+    re.IGNORECASE
+)
+
+ORDER_PATTERNS = [
+    re.compile(r'#\s?([A-Za-z0-9]{5,15})\b'),
+    re.compile(r'\b(?:order|ord|ticket|txn|id)[-:\s#]+([A-Za-z0-9]{4,15})\b', re.IGNORECASE),
+    re.compile(r'\b[A-Z]{2,4}[-_]?\d{4,10}\b')
+]
+
+CURRENCY_PATTERNS = [
+    re.compile(r'(?:Rs\.?|INR|\$|€|£)\s?\d+(?:,\d{3})*(?:\.\d{2})?', re.IGNORECASE),
+    re.compile(r'\b\d+(?:,\d{3})*(?:\.\d{2})?\s?(?:rupees|dollars|inr|usd)\b', re.IGNORECASE)
+]
+
 
 class AITicketGenerator:
-    def __init__(self):
-        self.models_loaded = False
-        self.category_model = None
-        self.priority_model = None
-        self.vectorizer = None
-        self.priority_vectorizer = None
+    """Singleton inference engine combining deterministic rules, ML pipelines, and NER."""
+    _instance = None
+
+    def __new__(cls):
+        if cls._instance is None:
+            cls._instance = super().__new__(cls)
+            cls._instance._init_engine()
+        return cls._instance
+
+    def _init_engine(self):
+        self.category_pipeline = None
+        self.priority_pipeline = None
         self.nlp = None
-        self.load_models()
+        self.models_loaded = False
+        self._load_pipelines()
+        self._load_spacy()
 
-    def load_models(self):
-        """Load trained category and priority models & vectorizers"""
-        try:
-            category_model_file = os.path.join(MODEL_DIR, 'category_model.pkl')
-            vectorizer_file = os.path.join(MODEL_DIR, 'vectorizer.pkl')
-            priority_model_file = os.path.join(MODEL_DIR, 'priority_model.pkl')
-            priority_vectorizer_file = os.path.join(MODEL_DIR, 'priority_vectorizer.pkl')
+    def _load_pipelines(self):
+        """Load single-artifact sklearn Pipelines for category and priority."""
+        cat_pipe_path = os.path.join(MODEL_DIR, 'category_pipeline.pkl')
+        pri_pipe_path = os.path.join(MODEL_DIR, 'priority_pipeline.pkl')
 
-            # Load Category Model & Vectorizer
-            if os.path.exists(category_model_file) and os.path.exists(vectorizer_file):
-                with open(category_model_file, 'rb') as f:
-                    self.category_model = pickle.load(f)
-                with open(vectorizer_file, 'rb') as f:
-                    self.vectorizer = pickle.load(f)
-                logger.info("[OK] Customer support category model & vectorizer loaded successfully")
-
-            # Load Priority Model & Vectorizer
-            if os.path.exists(priority_model_file) and os.path.exists(priority_vectorizer_file):
-                with open(priority_model_file, 'rb') as f:
-                    self.priority_model = pickle.load(f)
-                with open(priority_vectorizer_file, 'rb') as f:
-                    self.priority_vectorizer = pickle.load(f)
-                logger.info("[OK] Priority model loaded successfully")
-
-            # Load spaCy NLP Model
+        # Load category pipeline
+        if os.path.exists(cat_pipe_path):
             try:
-                self.nlp = spacy.load("en_core_web_sm")
-                logger.info("[OK] spaCy NER model loaded")
-            except Exception:
-                try:
-                    import subprocess
-                    subprocess.run(["python", "-m", "spacy", "download", "en_core_web_sm"], check=True)
-                    self.nlp = spacy.load("en_core_web_sm")
-                except Exception as ex:
-                    logger.warning(f"Could not load spaCy: {ex}")
-
-            if self.category_model is not None and self.vectorizer is not None:
+                with open(cat_pipe_path, 'rb') as f:
+                    self.category_pipeline = pickle.load(f)
                 self.models_loaded = True
-                logger.info("[OK] ML Ticket Generator initialized in ML mode")
-            else:
-                logger.warning("[WARN] ML models not found on disk. Operating in rule-based fallback mode")
+            except Exception as e:
+                logger.error("Failed loading category_pipeline.pkl: %s", e)
 
-        except Exception as e:
-            logger.error(f"[ERROR] Error loading models: {e}")
-            self.models_loaded = False
+        # Fallback to legacy separated artifacts if pipeline not found
+        if not self.category_pipeline:
+            legacy_model = os.path.join(MODEL_DIR, 'category_model.pkl')
+            legacy_vec = os.path.join(MODEL_DIR, 'vectorizer.pkl')
+            if os.path.exists(legacy_model) and os.path.exists(legacy_vec):
+                try:
+                    with open(legacy_model, 'rb') as fm, open(legacy_vec, 'rb') as fv:
+                        clf, vec = pickle.load(fm), pickle.load(fv)
+                    from sklearn.pipeline import Pipeline
+                    self.category_pipeline = Pipeline([('tfidf', vec), ('clf', clf)])
+                    self.models_loaded = True
+                except Exception as e:
+                    logger.warning("Failed loading legacy category model: %s", e)
 
-    def preprocess_text(self, text):
-        """Clean and normalize input text"""
-        if not text:
-            return ""
-        text = str(text).lower()
-        text = re.sub(r'\[.*?\]', ' ', text)
-        text = re.sub(r'[^\w\s]', ' ', text)
-        text = re.sub(r'\s+', ' ', text).strip()
-        return text
+        # Load priority pipeline
+        if os.path.exists(pri_pipe_path):
+            try:
+                with open(pri_pipe_path, 'rb') as f:
+                    self.priority_pipeline = pickle.load(f)
+            except Exception as e:
+                logger.warning("Failed loading priority_pipeline.pkl: %s", e)
+        elif os.path.exists(os.path.join(MODEL_DIR, 'priority_model.pkl')):
+            try:
+                with open(os.path.join(MODEL_DIR, 'priority_model.pkl'), 'rb') as fm, \
+                     open(os.path.join(MODEL_DIR, 'priority_vectorizer.pkl'), 'rb') as fv:
+                    p_clf, p_vec = pickle.load(fm), pickle.load(fv)
+                from sklearn.pipeline import Pipeline
+                self.priority_pipeline = Pipeline([('tfidf', p_vec), ('clf', p_clf)])
+            except Exception as e:
+                logger.warning("Failed loading legacy priority model: %s", e)
 
-    def extract_entities(self, text):
-        """Extract domain entities: products, order IDs, money amounts, dates, error codes"""
+        if not self.models_loaded:
+            logger.info("ML category model not found on disk. Operating in rule-based fallback mode.")
+
+    def _load_spacy(self):
+        """Load spaCy NER without invoking blocking downloads at runtime."""
+        try:
+            import spacy
+            self.nlp = spacy.load("en_core_web_sm")
+        except Exception:
+            logger.warning(
+                "spaCy model 'en_core_web_sm' is not installed. "
+                "Entity extraction will use regex-based fallback. "
+                "Run 'build.sh' or 'python -m spacy download en_core_web_sm' to enable full NER."
+            )
+            self.nlp = None
+
+    def extract_entities(self, text: str) -> Dict[str, list]:
+        """Extract domain entities: order/reference IDs, amounts, dates, products, and orgs."""
         entities = {
             'error_codes': [],
             'organizations': [],
@@ -114,24 +131,14 @@ class AITicketGenerator:
             'dates': [],
             'products': []
         }
+        if not text:
+            return entities
 
-        # 1. Product detection
-        common_products = [
-            'laptop', 'computer', 'pc', 'desktop', 'macbook', 'notebook',
-            'mobile', 'phone', 'smartphone', 'iphone', 'android', 'tablet', 'ipad',
-            'television', 'tv', 'led tv', 'oled tv', 'monitor', 'display', 'screen',
-            'headphones', 'earphones', 'airpods', 'earbuds', 'speaker', 'soundbar',
-            'watch', 'smartwatch', 'camera', 'dslr', 'lens',
-            'keyboard', 'mouse', 'charger', 'adapter', 'cable', 'hard disk', 'ssd', 'ram',
-            'refrigerator', 'fridge', 'washing machine', 'microwave', 'ac', 'air conditioner',
-            'shoes', 'shirt', 'dress', 'jeans', 'tshirt', 'jacket', 't-shirt'
-        ]
-        text_lower = text.lower()
-        for prod in common_products:
-            if re.search(r'\b' + re.escape(prod) + r'\b', text_lower):
-                entities['products'].append(prod.capitalize())
+        # Product matching with compiled regex
+        for match in PRODUCT_REGEX.finditer(text):
+            entities['products'].append(match.group(0).capitalize())
 
-        # 2. Extract with spaCy if available
+        # spaCy NER for dates, orgs, money
         if self.nlp:
             try:
                 doc = self.nlp(text)
@@ -144,249 +151,70 @@ class AITicketGenerator:
                         entities['amounts'].append(ent.text)
                     elif ent.label_ == 'PRODUCT':
                         entities['products'].append(ent.text)
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("spaCy extraction exception: %s", e)
 
-        # 3. Regex patterns for Order IDs, reference codes, currency amounts
-        order_patterns = [
-            r'#\s?([A-Za-z0-9]{5,15})\b',
-            r'\b(?:order|ord|ticket|txn|id)[-:\s#]+([A-Za-z0-9]{4,15})\b',
-            r'\b[A-Z]{2,4}[-_]?\d{4,10}\b'
-        ]
-        for pattern in order_patterns:
-            matches = re.findall(pattern, text, re.IGNORECASE)
-            for m in matches:
+        # Regex for Order/Txn IDs and amounts
+        for pattern in ORDER_PATTERNS:
+            for m in pattern.findall(text):
                 entities['error_codes'].append(m if isinstance(m, str) else m[0])
 
-        currency_patterns = [
-            r'(?:Rs\.?|INR|\$|€|£)\s?\d+(?:,\d{3})*(?:\.\d{2})?',
-            r'\b\d+(?:,\d{3})*(?:\.\d{2})?\s?(?:rupees|dollars|inr|usd)\b'
-        ]
-        for pattern in currency_patterns:
-            matches = re.findall(pattern, text, re.IGNORECASE)
-            for m in matches:
+        for pattern in CURRENCY_PATTERNS:
+            for m in pattern.findall(text):
                 entities['amounts'].append(m)
 
-        # Deduplicate and limit to 5 per list
         for k in entities:
             entities[k] = list(dict.fromkeys(entities[k]))[:5]
 
         return entities
 
-    def generate_title(self, text):
-        """Generate a concise, professional title from complaint text"""
+    def generate_title(self, text: str) -> str:
+        """Create a concise, professional title from customer narrative."""
         if not text:
             return "Support Ticket"
-        sentences = re.split(r'[.!?\n]', text)
-        first_sentence = sentences[0].strip() if sentences and sentences[0].strip() else text[:60]
-        
-        if len(first_sentence) > 75:
-            title = first_sentence[:75].rsplit(' ', 1)[0] + '...'
-        else:
-            title = first_sentence
-
+        first = re.split(r'[.!?\n]', text)[0].strip() or text[:60]
+        title = (first[:75].rsplit(' ', 1)[0] + '...') if len(first) > 75 else first
         title = title.strip().capitalize()
-        if not title.endswith(('.', '!', '?', '...')):
-            title += '...'
-        return title
+        return title if title.endswith(('.', '!', '?', '...')) else title + '...'
 
-    def rule_based_category(self, text):
-        """
-        High-precision rule-based category classifier based on customer support data.
-        Maps requests to one of the 12 canonical customer support categories:
-        - Product Queries
-        - Returns
-        - Order Related
-        - Refund Related
-        - Payments related
-        - Cancellation
-        - Shopzilla Related
-        - Feedback
-        - Offers & Cashback
-        - App/website
-        - Onboarding related
-        - Others
-        """
-        t = text.lower()
-
-        # 1. Shopzilla Account & Access (Login, signup, password, OTP, profile)
-        if any(w in t for w in [
-            'login', 'log in', 'signup', 'sign up', 'password reset', 'forgot password',
-            'password', 'otp not received', 'update phone', 'update email', 'account deactivation',
-            'shopzilla premium', 'membership', 'rewards points'
-        ]):
-            return 'Shopzilla Related'
-
-        # 2. Others / Call requests
-        if any(w in t for w in ['call me back', 'call back request', 'call disconnected', 'callback']):
-            return 'Others'
-
-        # 3. App/website (App crash, bug, website not opening)
-        if any(w in t for w in [
-            'app crash', 'app is crashing', 'crashes', 'website not loading',
-            'app not opening', 'app freezing', 'bug in app', 'glitch on website',
-            'ui error', 'error page', 'checkout crash'
-        ]):
-            return 'App/website'
-
-        # 4. Offers & Cashback (Discounts, coupons, promo codes)
-        if any(w in t for w in [
-            'cashback', 'coupon', 'promo code', 'discount code', 'affiliate offer',
-            'instant discount', 'voucher code', 'offer not applied'
-        ]):
-            return 'Offers & Cashback'
-
-        # 5. Cancellation (Cancel order, stop shipment, not needed)
-        if any(w in t for w in [
-            'cancel order', 'cancellation', 'cancel my order', 'stop delivery',
-            'not needed anymore', "don't want the product", 'ordered by mistake',
-            'cancel shipment'
-        ]):
-            return 'Cancellation'
-
-        # 6. Refund Related (Money refund, bank credit, COD refund)
-        if any(w in t for w in [
-            'refund', 'money back', 'amount not credited', 'cod refund',
-            'refund status', 'refund pending', 'return payment', 'reimbursement',
-            'where is my refund', 'refund not received'
-        ]):
-            return 'Refund Related'
-
-        # 7. Payments related (Payment failed, debited, wallet, EMI, cards)
-        if any(w in t for w in [
-            'payment', 'money debited', 'money deducted', 'debited twice',
-            'deducted twice', 'payment failed', 'transaction failed',
-            'emi', 'paylater', 'pay later', 'wallet balance', 'net banking',
-            'gateway error', 'billing error', 'double charged'
-        ]):
-            return 'Payments related'
-
-        # 8. Returns (Defective/damaged product return, replacement, reverse pickup)
-        if any(w in t for w in [
-            'return', 'replace', 'replacement', 'exchange', 'reverse pickup',
-            'wrong product', 'wrong item', 'damaged product', 'damaged item',
-            'broken item', 'missing item', 'missing parts', 'technician visit',
-            'defective product received', 'damaged parcel', 'exchange size'
-        ]):
-            return 'Returns'
-
-        # 9. Feedback (Agent behaviour, rude delivery person, complaint on staff)
-        if any(w in t for w in [
-            'rude', 'abusive', 'behaviour', 'behavior', 'misbehaved',
-            'unprofessional', 'delivery boy misbehaved', 'agent shouted',
-            'pathetic customer support', 'worst executive'
-        ]):
-            return 'Feedback'
-
-        # 10. Onboarding related (Seller registration, merchant)
-        if any(w in t for w in [
-            'seller onboarding', 'sell on shopzilla', 'merchant registration',
-            'seller account', 'seller commission', 'gst verification'
-        ]):
-            return 'Onboarding related'
-
-        # 11. Order Related (Order tracking, delayed delivery, invoice, installation)
-        if any(w in t for w in [
-            'delay', 'delayed', 'where is my order', 'order status', 'tracking',
-            'track my package', 'courier', 'delivery boy', 'delivery date',
-            'not delivered', 'dispatched', 'installation', 'demo', 'invoice copy',
-            'bill copy', 'seller cancelled'
-        ]):
-            return 'Order Related'
-
-        # 12. Product Queries (Hardware defect, overheating, display, specs, compatibility, warranty)
-        hardware_symptoms = [
-            'heating', 'overheating', 'heat up', 'heat', 'display not visible',
-            'screen blank', 'screen is blank', 'display blank', 'screen not working',
-            'not working', 'flickering', 'fan noise', 'motherboard', 'battery draining',
-            'battery not charging', 'keyboard not working', 'camera not working',
-            'touch not working', 'sound not coming', 'bluetooth not connecting',
-            'wont turn on', "won't turn on", 'shut down automatically',
-            'powers off', 'black screen', 'blue screen', 'ram upgrade', 'compatibility',
-            'warranty period', 'claim warranty', 'user manual', 'product specification',
-            'specifications', 'specs', 'warranty', 'guarantee'
-        ]
-        hardware_devices = [
-            'laptop', 'computer', 'screen', 'display', 'mobile', 'phone', 'tv',
-            'monitor', 'device', 'smartwatch', 'keyboard', 'camera', 'speaker',
-            'headphone', 'charger', 'pc', 'tablet'
-        ]
-        
-        if any(s in t for s in hardware_symptoms) or any(d in t for d in hardware_devices):
-            return 'Product Queries'
-
-        return 'Others'
-
-    def predict_category(self, text):
-        """
-        Predict one of the 12 customer support categories:
-        Combines domain intent disambiguation with trained TF-IDF classifier.
-        """
-        t = str(text).lower()
-        if any(w in t for w in ['call me back', 'call back request', 'call disconnected', 'callback']):
-            return 'Others'
-
-        # 1. First check deterministic high-confidence rules
-        rule_cat = self.rule_based_category(text)
+    def predict_category(self, text: str) -> str:
+        """Rule-first, ML fallback category triage."""
+        rule_cat = rule_based_category(text)
         if rule_cat != 'Others':
             return rule_cat
 
-        # 2. Use trained ML model if available
-        if self.models_loaded and self.category_model is not None and self.vectorizer is not None:
+        if self.category_pipeline is not None:
             try:
-                vec = self.vectorizer.transform([text])
-                pred = self.category_model.predict(vec)[0]
-                category_name = CATEGORY_MAPPING.get(pred, str(pred))
-                return category_name
+                pred = self.category_pipeline.predict([text])[0]
+                if pred in ALLOWED_CATEGORIES:
+                    return pred
             except Exception as e:
-                logger.error(f"Inference error in category prediction: {e}")
-                return rule_cat
+                logger.error("Category ML inference error: %s", e)
 
         return rule_cat
 
-    def predict_priority(self, text):
-        """Predict Priority (High, Medium, Low) based on customer urgency"""
-        text_lower = text.lower()
+    def predict_priority(self, text: str) -> str:
+        """Priority triage: rules first, ML fallback."""
+        rule_prio = rule_based_priority(text)
+        if rule_prio != 'Low':
+            return rule_prio
 
-        # High urgency: safety, fraud, severe heating, legal escalation
-        critical_high = [
-            'fire', 'smoke', 'shock', 'electric', 'blast', 'exploded',
-            'burst', 'heating very badly', 'overheating badly',
-            'urgent', 'emergency', 'asap', 'critical', 'immediately',
-            'fraud', 'stolen', 'unauthorized', 'theft', 'skimming',
-            'consumer court', 'police', 'legal notice', 'lawsuit',
-            'abusive', 'harassment'
-        ]
-        if any(w in text_lower for w in critical_high):
-            return 'High'
-
-        # Medium urgency: product not working, heating, display, delay, refund pending
-        critical_medium = [
-            'not working', 'heating', 'display not visible', 'screen blank',
-            'flickering', 'broken', 'damaged', 'defective', 'wrong product',
-            'delayed', 'refund pending', 'payment failed', 'money debited',
-            'missing item', 'app crash'
-        ]
-        if any(w in text_lower for w in critical_medium):
-            return 'Medium'
-
-        # Check trained priority model
-        if self.priority_model is not None and self.priority_vectorizer is not None:
+        if self.priority_pipeline is not None:
             try:
-                vec = self.priority_vectorizer.transform([text])
-                pred = self.priority_model.predict(vec)[0]
-                return str(pred)
+                pred = self.priority_pipeline.predict([text])[0]
+                if pred in ALLOWED_PRIORITIES:
+                    return pred
             except Exception as e:
-                logger.error(f"Inference error in priority prediction: {e}")
+                logger.error("Priority ML inference error: %s", e)
 
-        return 'Low'
+        return rule_prio
 
-    def generate_ticket(self, text):
-        """Complete structured ticket generation pipeline"""
+    def generate_ticket(self, text: str) -> Dict[str, Any]:
+        """Public API generating structured ticket from free-form text."""
         if not text or len(str(text).strip()) < 5:
             return {
                 "title": "Invalid Ticket Request",
-                "description": str(text),
+                "description": str(text or ""),
                 "category": "Others",
                 "priority": "Low",
                 "entities": {},
@@ -394,23 +222,32 @@ class AITicketGenerator:
                 "error": "Description is too short."
             }
 
-        title = self.generate_title(text)
-        category = self.predict_category(text)
-        priority = self.predict_priority(text)
-        entities = self.extract_entities(text)
+        text_str = str(text).strip()
+        rule_cat = rule_based_category(text_str)
+        category = self.predict_category(text_str)
+        priority = self.predict_priority(text_str)
+        entities = self.extract_entities(text_str)
+
+        # ml_used is True if the category had to fallback to ML and ML was loaded
+        ml_used = bool(rule_cat == 'Others' and self.category_pipeline is not None)
 
         return {
-            "title": title,
-            "description": text,
+            "title": self.generate_title(text_str),
+            "description": text_str,
             "category": category,
             "priority": priority,
             "entities": entities,
-            "ml_used": self.models_loaded
+            "ml_used": ml_used
         }
 
-# Global singleton instance
+
+# Module singleton instance
 ai_generator = AITicketGenerator()
 
-def generate_ticket(text):
-    """Entry point for ticket generation"""
+def generate_ticket(text: str) -> Dict[str, Any]:
+    """Public functional entry point for ticket generation."""
     return ai_generator.generate_ticket(text)
+
+def extract_entities(text: str) -> Dict[str, list]:
+    """Server-side entity extraction helper."""
+    return ai_generator.extract_entities(text)

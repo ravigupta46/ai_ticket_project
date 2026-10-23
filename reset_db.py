@@ -1,37 +1,33 @@
-# reset_db.py
+"""reset_db.py
+Database reset tool. Creates fresh schema and seeds test users with secure password hashes.
+"""
 import os
-import sqlite3
-from database import init_db
+from database import init_db, create_user
 
-print("="*60)
-print("⚠️  DATABASE RESET TOOL")
-print("="*60)
-print("\nThis will DELETE all existing data and create a fresh database!")
-print("  - All users will be deleted")
-print("  - All tickets will be deleted")
-print("  - All tables will be recreated")
+DB_FILE = "users.db"
 
-confirm = input("\nType 'YES' to continue: ")
 
-if confirm == "YES":
-    # Delete existing database
-    db_file = "users.db"
-    if os.path.exists(db_file):
-        os.remove(db_file)
-        print(f"✅ Deleted old database: {db_file}")
-    else:
-        print("📂 No existing database found")
-    
-    # Create new database with updated schema
-    print("\n🔄 Creating new database with updated schema...")
+def reset_database(force: bool = False):
+    """Delete old database and recreate fresh schema with seed accounts."""
+    if not force:
+        confirm = input("\nType 'YES' to delete all data and recreate the database: ")
+        if confirm != "YES":
+            print("Operation cancelled.")
+            return
+
+    if os.path.exists(DB_FILE):
+        try:
+            os.remove(DB_FILE)
+            print(f"[RESET] Removed existing database: {DB_FILE}")
+        except Exception as e:
+            print(f"[WARN] Could not remove {DB_FILE}: {e}")
+
     init_db()
-    
-    print("\n" + "="*60)
-    print("✅ DATABASE RESET COMPLETED SUCCESSFULLY!")
-    print("="*60)
-    print("\n📝 Next steps:")
-    print("1. Run your Flask app: python app.py")
-    print("2. Register new users")
-    print("3. Start creating tickets")
-else:
-    print("\n❌ Operation cancelled")
+    # Seed development accounts with secure hashes
+    create_user("demo_user", "password123", "user")
+    create_user("demo_agent", "password123", "agent")
+    print("[RESET] Fresh database created and seeded with test accounts ('demo_user', 'demo_agent').")
+
+
+if __name__ == "__main__":
+    reset_database()

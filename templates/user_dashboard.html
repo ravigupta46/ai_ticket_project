@@ -12,20 +12,20 @@
 <div class="accuracy-cards">
     <div class="accuracy-card">
         <div class="stat-icon">🎯</div>
-        <div class="accuracy-value">{{ "%.2f"|format(classification_accuracy) }}%</div>
+        <div class="accuracy-value">{{ "%.2f"|format(classification_accuracy) + '%' if classification_accuracy is not none else 'N/A' }}</div>
         <div class="accuracy-label">Category Accuracy</div>
         <div class="progress-bar">
-            <div class="progress-fill" style="width: {{ classification_accuracy }}%"></div>
+            <div class="progress-fill" style="width: {{ classification_accuracy or 0 }}%"></div>
         </div>
-        <p class="stat-description">Bank Accounts • Credit Cards • Theft/Dispute • Loans • Others</p>
+        <p class="stat-description">Product Queries • Orders • Returns • Refunds • Others</p>
     </div>
 
     <div class="accuracy-card">
         <div class="stat-icon">⚡</div>
-        <div class="accuracy-value">{{ "%.2f"|format(priority_accuracy) }}%</div>
+        <div class="accuracy-value">{{ "%.2f"|format(priority_accuracy) + '%' if priority_accuracy is not none else 'N/A' }}</div>
         <div class="accuracy-label">Priority Accuracy</div>
         <div class="progress-bar">
-            <div class="progress-fill" style="width: {{ priority_accuracy }}%"></div>
+            <div class="progress-fill" style="width: {{ priority_accuracy or 0 }}%"></div>
         </div>
         <p class="stat-description">High • Medium • Low</p>
     </div>

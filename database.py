@@ -1,15 +1,29 @@
-# database.py (FIXED)
+"""database.py
+SQLite database interface for ResolvAI tickets and users.
+Features safe migrations, parameterized queries, and transparent password hash upgrades.
+"""
 import sqlite3
+import json
 from datetime import datetime
 from werkzeug.security import generate_password_hash, check_password_hash
 
+DB_NAME = "users.db"
+
+
+def get_db():
+    """Return database connection with Row factory."""
+    conn = sqlite3.connect(DB_NAME)
+    conn.row_factory = sqlite3.Row
+    return conn
+
+
 def init_db():
-    conn = sqlite3.connect("users.db")
+    """Initialize tables and run non-destructive schema migrations."""
+    conn = get_db()
     c = conn.cursor()
 
-    # USERS TABLE - Added UNIQUE constraint on username
     c.execute("""
-    CREATE TABLE IF NOT EXISTS users(
+    CREATE TABLE IF NOT EXISTS users (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         username TEXT UNIQUE NOT NULL,
         password TEXT NOT NULL,
@@ -18,62 +32,56 @@ def init_db():
     )
     """)
 
-    # TICKETS TABLE - Added created_at column
     c.execute("""
-    CREATE TABLE IF NOT EXISTS tickets(
+    CREATE TABLE IF NOT EXISTS tickets (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         username TEXT NOT NULL,
         title TEXT NOT NULL,
         description TEXT NOT NULL,
         category TEXT NOT NULL,
         priority TEXT NOT NULL,
-        status TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'Open',
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         resolved_at TIMESTAMP,
+        entities TEXT DEFAULT '{}',
         FOREIGN KEY (username) REFERENCES users(username)
     )
     """)
 
-    # Check if we need to add created_at column to existing table
-    try:
+    # Non-destructive migrations: inspect existing columns before adding
+    c.execute("PRAGMA table_info(tickets)")
+    cols = {row["name"] for row in c.fetchall()}
+
+    if "created_at" not in cols:
         c.execute("ALTER TABLE tickets ADD COLUMN created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP")
-    except sqlite3.OperationalError:
-        pass  # Column already exists
-
-    try:
+    if "resolved_at" not in cols:
         c.execute("ALTER TABLE tickets ADD COLUMN resolved_at TIMESTAMP")
-    except sqlite3.OperationalError:
-        pass  # Column already exists
+    if "entities" not in cols:
+        c.execute("ALTER TABLE tickets ADD COLUMN entities TEXT DEFAULT '{}'")
 
-    # Migrate any plain text passwords to secure password hashes
+    # Upgrade any legacy plaintext passwords to secure werkzeug hashes
     try:
         c.execute("SELECT id, password FROM users")
-        for user_id, pwd in c.fetchall():
-            if pwd and not (pwd.startswith("scrypt:") or pwd.startswith("pbkdf2:") or pwd.startswith("argon2:")):
-                c.execute("UPDATE users SET password = ? WHERE id = ?", (generate_password_hash(pwd), user_id))
+        for row in c.fetchall():
+            pwd = row["password"]
+            if pwd and not any(pwd.startswith(prefix) for prefix in ("scrypt:", "pbkdf2:", "argon2:")):
+                c.execute("UPDATE users SET password = ? WHERE id = ?", (generate_password_hash(pwd), row["id"]))
     except sqlite3.OperationalError:
         pass
 
     conn.commit()
     conn.close()
-    print("[OK] Database initialized successfully")
 
-# Helper function to get database connection
-def get_db():
-    """Get database connection"""
-    conn = sqlite3.connect("users.db")
-    conn.row_factory = sqlite3.Row
-    return conn
 
 def create_user(username, password, role):
-    """Register a new user with hashed password"""
+    """Register a new user with hashed password."""
     conn = get_db()
     c = conn.cursor()
-    hashed_password = generate_password_hash(password)
+    hashed = generate_password_hash(password)
     try:
         c.execute(
             "INSERT INTO users (username, password, role) VALUES (?, ?, ?)",
-            (username, hashed_password, role)
+            (username.strip(), hashed, role)
         )
         conn.commit()
         return True, "Registration successful! Please login."
@@ -82,77 +90,68 @@ def create_user(username, password, role):
     finally:
         conn.close()
 
+
 def authenticate_user(username, password):
-    """Authenticate user with hashed password (supports automatic legacy password upgrade)"""
+    """Authenticate user with automatic transparent upgrade for legacy plaintext rows."""
     conn = get_db()
     c = conn.cursor()
-    c.execute("SELECT password, role FROM users WHERE username = ?", (username,))
+    c.execute("SELECT password, role FROM users WHERE username = ?", (username.strip(),))
     user = c.fetchone()
-    
+
     if not user:
         conn.close()
         return None
-        
-    stored_password = user["password"]
+
+    stored = user["password"]
     role = user["role"]
-    
-    if check_password_hash(stored_password, password):
+
+    if check_password_hash(stored, password):
         conn.close()
         return {"username": username, "role": role}
-    elif stored_password == password:
-        # Transparently upgrade legacy plaintext password to secure hash
+
+    # Transparent legacy migration check
+    if stored == password:
         new_hash = generate_password_hash(password)
-        c.execute("UPDATE users SET password = ? WHERE username = ?", (new_hash, username))
+        c.execute("UPDATE users SET password = ? WHERE username = ?", (new_hash, username.strip()))
         conn.commit()
         conn.close()
         return {"username": username, "role": role}
-        
+
     conn.close()
     return None
 
-# Function to create a new ticket
-# database.py - Update the create_ticket function
 
-# database.py - More flexible create_ticket function
-
-# database.py - Simplified working version
-
-def create_ticket(username, title, description, category, priority):
-    """Create a new ticket"""
+def create_ticket(username, title, description, category, priority, entities=None):
+    """Create a new ticket with serialized entities JSON."""
     conn = get_db()
     c = conn.cursor()
-    
+    entities_str = json.dumps(entities) if isinstance(entities, dict) else (entities or '{}')
+
     c.execute("""
-    INSERT INTO tickets (username, title, description, category, priority, status, created_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?)
-    """, (username, title, description, category, priority, 'Open', datetime.now()))
-    
+    INSERT INTO tickets (username, title, description, category, priority, status, created_at, entities)
+    VALUES (?, ?, ?, ?, ?, 'Open', ?, ?)
+    """, (username, title, description, category, priority, datetime.now().strftime('%Y-%m-%d %H:%M:%S'), entities_str))
+
     ticket_id = c.lastrowid
     conn.commit()
     conn.close()
     return ticket_id
 
 
-# Function to get user tickets
 def get_user_tickets(username):
+    """Get tickets submitted by a specific user."""
     conn = get_db()
     c = conn.cursor()
-    
-    c.execute("""
-    SELECT * FROM tickets 
-    WHERE username = ? 
-    ORDER BY created_at DESC
-    """, (username,))
-    
+    c.execute("SELECT * FROM tickets WHERE username = ? ORDER BY created_at DESC", (username,))
     tickets = c.fetchall()
     conn.close()
     return tickets
 
-# Function to get all tickets (for agents)
+
 def get_all_tickets():
+    """Get all tickets sorted by priority urgency and creation date."""
     conn = get_db()
     c = conn.cursor()
-    
     c.execute("""
     SELECT * FROM tickets 
     ORDER BY 
@@ -160,63 +159,55 @@ def get_all_tickets():
             WHEN 'High' THEN 1 
             WHEN 'Medium' THEN 2 
             WHEN 'Low' THEN 3 
+            ELSE 4
         END,
         created_at DESC
     """)
-    
     tickets = c.fetchall()
     conn.close()
     return tickets
 
-# Function to update ticket status
+
 def update_ticket_status(ticket_id, status):
+    """Update ticket resolution status."""
     conn = get_db()
     c = conn.cursor()
-    
-    resolved_at = datetime.now() if status == 'Resolved' else None
-    
+    resolved_at = datetime.now().strftime('%Y-%m-%d %H:%M:%S') if status == 'Resolved' else None
+
     c.execute("""
     UPDATE tickets 
     SET status = ?, resolved_at = COALESCE(?, resolved_at)
     WHERE id = ?
     """, (status, resolved_at, ticket_id))
-    
+
+    success = c.rowcount > 0
     conn.commit()
     conn.close()
-    return True
+    return success
 
-# Function to get ticket by ID
+
 def get_ticket_by_id(ticket_id):
+    """Fetch single ticket by ID."""
     conn = get_db()
     c = conn.cursor()
-    
     c.execute("SELECT * FROM tickets WHERE id = ?", (ticket_id,))
     ticket = c.fetchone()
     conn.close()
     return ticket
 
-# Function to get ticket statistics
+
 def get_ticket_stats():
+    """Aggregate statistics for agent operations console."""
     conn = get_db()
     c = conn.cursor()
-    
     stats = {}
-    
-    # Total tickets
+
     c.execute("SELECT COUNT(*) FROM tickets")
     stats['total'] = c.fetchone()[0]
-    
-    # By status
-    c.execute("SELECT status, COUNT(*) FROM tickets GROUP BY status")
-    stats['by_status'] = dict(c.fetchall())
-    
-    # By priority
-    c.execute("SELECT priority, COUNT(*) FROM tickets GROUP BY priority")
-    stats['by_priority'] = dict(c.fetchall())
-    
-    # By category
-    c.execute("SELECT category, COUNT(*) FROM tickets GROUP BY category")
-    stats['by_category'] = dict(c.fetchall())
-    
+
+    for key, col in [('by_status', 'status'), ('by_priority', 'priority'), ('by_category', 'category')]:
+        c.execute(f"SELECT {col}, COUNT(*) FROM tickets GROUP BY {col}")
+        stats[key] = dict(c.fetchall())
+
     conn.close()
     return stats

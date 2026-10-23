@@ -10,7 +10,7 @@
         <span>✨ Next-Gen NLP & Topic Modeling</span>
       </div>
       <h1 class="hero-title">Support triage, engineered for intelligence</h1>
-      <p class="hero-sub">ResolvAI automatically discovers complaint patterns, categorizes financial service tickets using NMF topic modeling, and routes urgent issues with sub-second latency.</p>
+      <p class="hero-sub">ResolvAI automatically analyzes customer complaints, categorizes e-commerce support tickets using a hybrid rules + ML pipeline, and routes urgent issues with sub-second latency.</p>
 
       <div class="hero-ctas">
         <a href="{{ url_for('register') }}" class="btn btn-primary">Get Started with ResolvAI</a>
@@ -18,9 +18,9 @@
       </div>
 
       <ul class="trust-list">
-        <li>⚡ 89.65% Multi-Class Accuracy</li>
-        <li>🤖 Automated NMF Topic Discovery</li>
-        <li>🔍 Financial Entity Extraction</li>
+        <li>⚡ 12 Customer Support Categories</li>
+        <li>🤖 Hybrid Regex & ML Classification</li>
+        <li>🔍 Domain Entity Extraction</li>
       </ul>
     </div>
 
@@ -28,20 +28,20 @@
       <div class="card status-card">
         <div class="card-header">Model Intelligence Status</div>
         <div class="card-body">
-          <div class="status-row"><strong>NMF Topic Categorization</strong><span>89.65% (F1: 0.90)</span></div>
-          <div class="status-row"><strong>Priority Model</strong><span>Active (95.45%)</span></div>
-          <div class="status-row"><strong>Entity Extraction (spaCy)</strong><span>Ready</span></div>
+          <div class="status-row"><strong>Category Model</strong><span>{{ category_accuracy }}</span></div>
+          <div class="status-row"><strong>Priority Model</strong><span>{{ priority_accuracy }}</span></div>
+          <div class="status-row"><strong>Entity Extraction</strong><span>Ready</span></div>
         </div>
       </div>
 
       <div class="card preview-ticket">
         <div class="card-header">Live Triage Preview</div>
         <div class="card-body">
-          <h4>Credit card double charge dispute</h4>
-          <p class="muted">The bill amount of my credit card was debited twice for $250. Please look into the matter and refund immediately.</p>
+          <h4>Overheating and display failure</h4>
+          <p class="muted">Laptop is heating up rapidly and screen display is blank. Need urgent warranty replacement for order #ORD-55421.</p>
 
           <div class="ticket-meta">
-            <span class="chip" style="background: #ede9fe; color: #6d28d9; font-weight: 600;">Category: Payments related</span>
+            <span class="chip" style="background: #ede9fe; color: #6d28d9; font-weight: 600;">Category: Product Queries</span>
             <span class="chip" style="background: #fee2e2; color: #991b1b; font-weight: 600;">Priority: High</span>
           </div>
         </div>

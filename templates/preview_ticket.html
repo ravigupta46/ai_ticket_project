@@ -87,6 +87,7 @@
 
         <div style="display: flex; gap: 1rem; margin-top: 2.5rem;">
             <form method="POST" action="{{ url_for('confirm_ticket') }}" style="flex: 1;">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                 <input type="hidden" name="title" value="{{ ticket.title }}">
                 <input type="hidden" name="description" value="{{ ticket.description }}">
                 <input type="hidden" name="category" value="{{ ticket.category }}">

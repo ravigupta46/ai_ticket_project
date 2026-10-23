@@ -1,0 +1,134 @@
+{
+  "Product Queries": [
+    "Laptop is heating very badly during usage",
+    "Laptop is heating up",
+    "Laptop is not working properly",
+    "Display not visible on laptop screen",
+    "Screen display is blank and not turning on",
+    "Laptop screen flickering and display not visible",
+    "Laptop motherboard heating issue and fan noise",
+    "Product specific information and technical specifications",
+    "Is this laptop compatible with 16GB RAM and SSD?",
+    "What is the warranty period for this electronics item?",
+    "How to claim warranty for defective mobile device?",
+    "Device battery draining very fast and overheating",
+    "Headphones sound not coming from left earphone",
+    "Keyboard keys are not functioning properly",
+    "Camera not working and display blank",
+    "Information about product features and specifications",
+    "Warranty related query for electronics product",
+    "Product user manual and technical guide request",
+    "Mobile display broken and touch screen not responding",
+    "Smartwatch not connecting to bluetooth and display off",
+    "Heating issue in laptop while charging",
+    "Laptop screen black out and display not coming",
+    "Hardware problem in laptop display and keyboard",
+    "Technical specification inquiry for laptop and computer"
+  ],
+  "Returns": [
+    "I want to return this damaged product",
+    "Request for reverse pickup of returned item",
+    "Wrong product delivered in my parcel",
+    "Missing items and parts in the package delivered",
+    "Item received is damaged and cracked",
+    "Technician visit requested for defective product inspection",
+    "Exchange and replacement of wrong size product",
+    "Product return request for refund",
+    "Service center denied repair, need product return",
+    "Defective item received, please arrange return pickup",
+    "Courier delivery boy did not come for return pickup",
+    "Replacement product has not been dispatched yet"
+  ],
+  "Order Related": [
+    "Where is my order? Delivery is delayed by many days",
+    "Order status enquiry and live tracking details",
+    "Installation and demo requested for newly delivered product",
+    "Invoice bill copy request for my order",
+    "Seller cancelled my order without my permission",
+    "Priority delivery requested for urgent order",
+    "Package not delivered yet, delivery boy not calling",
+    "Unable to track my shipment on courier website",
+    "Change delivery address for my current order",
+    "Order dispatch delay and delivery date inquiry",
+    "When will my order be dispatched and delivered?",
+    "Delivery executive marked delivered but I have not received order"
+  ],
+  "Refund Related": [
+    "My refund has not been credited to bank account",
+    "Refund enquiry for returned order",
+    "COD refund details not updated in my account",
+    "When will I get my refund for the cancelled item?",
+    "Refund amount is less than the paid price",
+    "Refund pending since last week after reverse pickup",
+    "Bank account refund status and reference number",
+    "Money refunded to wallet instead of original bank payment",
+    "Refund rejected without any reason, please check",
+    "Where is my refund for order return?"
+  ],
+  "Payments related": [
+    "Payment debited from bank account but order not confirmed",
+    "Online payment failed during checkout transaction",
+    "Money deducted twice for single order purchase",
+    "Credit card EMI payment options and interest rate query",
+    "Shopzilla PayLater bill payment issue and dues",
+    "Wallet balance not showing and money deducted",
+    "Payment gateway error during net banking payment",
+    "Billing error and incorrect charges on invoice",
+    "Gift card balance not applied during checkout payment",
+    "UPI payment deducted but transaction failed"
+  ],
+  "Cancellation": [
+    "I want to cancel my order immediately",
+    "Order cancellation requested as item is not needed anymore",
+    "Cancel return request, I want to keep the product",
+    "How to cancel order placed by mistake",
+    "Please cancel the shipment before dispatch",
+    "Cancel this order right now and stop delivery"
+  ],
+  "Shopzilla Related": [
+    "Unable to login to my Shopzilla account",
+    "Forgot password and OTP not received for account login",
+    "Shopzilla Premium membership subscription and renewal benefits",
+    "Update my phone number and email in account profile",
+    "Shopzilla rewards points and coins not credited",
+    "How to delete or deactivate my Shopzilla account",
+    "General enquiry regarding Shopzilla shopping account"
+  ],
+  "Feedback": [
+    "Delivery agent was extremely rude and unprofessional",
+    "Customer support executive disconnected my call without helping",
+    "Very bad customer service experience with call center",
+    "Delivery person refused to deliver to doorstep and misbehaved",
+    "Complaint regarding agent behavior during call",
+    "Staff was impolite and shouted on customer"
+  ],
+  "Offers & Cashback": [
+    "Cashback not credited to my wallet after purchase",
+    "Affiliate offer discount coupon not working",
+    "Instant discount was not applied during payment",
+    "Where to enter promo code for offer discount",
+    "Cashback voucher expired before the validity period",
+    "Discount coupon code invalid during order placement"
+  ],
+  "App/website": [
+    "Shopzilla mobile app is crashing on checkout screen",
+    "Website is not loading and throwing error page",
+    "Unable to add items to cart on mobile app",
+    "App freezing and slow response on android phone",
+    "Bug in app search bar, search results not showing",
+    "Application getting closed automatically when clicking payment"
+  ],
+  "Onboarding related": [
+    "How to register as a seller on Shopzilla marketplace",
+    "Seller onboarding documentation and verification process",
+    "Seller commission fees and payout schedule details",
+    "Merchant account registration status and GST verification",
+    "Become a merchant and sell products on Shopzilla platform"
+  ],
+  "Others": [
+    "Please call me back regarding my enquiry",
+    "Call got disconnected during discussion with agent",
+    "General enquiry not related to any order",
+    "Call back request from customer support manager"
+  ]
+}

@@ -26,9 +26,9 @@ dmypy.json
 *~
 
 # Project specific
-data/
-data/raw/
-data/processed/
+/data/
+/data/raw/
+/data/processed/
 /output/
 models/
 checkpoints/
@@ -46,16 +46,25 @@ model/*.joblib
 !model/vectorizer.pkl
 !model/priority_model.pkl
 !model/priority_vectorizer.pkl
+!model/category_pipeline.pkl
+!model/priority_pipeline.pkl
+!model/data/domain_phrases.json
+!model/output/metrics.json
 !model/output/model_comparison_results.json
+!model/output/category_accuracy.txt
+!model/output/priority_accuracy.txt
 
 # datasets (ignore large raw files)
 *.csv
 !model/output/training_data.csv
-!model/output/cleaned_tickets.csv
 
 # SQLite DB
 *.db
 users.db
+
+# Scratch / temporary
+test.pdf
+*.pdf
 
 # OS
 .DS_Store

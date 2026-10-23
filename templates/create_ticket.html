@@ -11,12 +11,13 @@
         </div>
 
         <form method="POST" class="auth-form" id="ticketForm" onsubmit="return previewTicket()">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <div class="form-group">
                 <label for="description" style="font-size: 1rem;">📝 Describe Your Problem</label>
                 <textarea 
                     id="description" 
                     name="description" 
-                    placeholder="Example: The bill amount of my credit card was debited twice. Please look into the matter and resolve at the earliest with a refund."
+                    placeholder="Example: Laptop is overheating and the display screen is blank when powering on. Need immediate technical service or warranty claim."
                     required
                     style="padding: 1rem; min-height: 150px; border: 2px solid var(--border); border-radius: 10px; font-size: 1rem; font-family: inherit; transition: all 0.3s ease; background: var(--light);"
                 ></textarea>
@@ -27,7 +28,7 @@
                 <label style="font-weight: 700; color: var(--primary); margin-bottom: 1rem; display: block;">✨ AI Will Automatically:</label>
                 <ul style="list-style: none; padding: 0; display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem;">
                     <li style="margin: 0;">✅ Generate concise title</li>
-                    <li style="margin: 0;">✅ Categorize financial product</li>
+                    <li style="margin: 0;">✅ Categorize support issue</li>
                     <li style="margin: 0;">✅ Set priority & urgency</li>
                     <li style="margin: 0;">✅ Extract entities & amounts</li>
                 </ul>
@@ -41,23 +42,23 @@
 
     <!-- Example templates for users -->
     <div style="margin-top: 2.5rem;">
-        <h3 style="margin-bottom: 1.5rem; font-size: 1.3rem; color: var(--dark);">📝 Example Financial Complaints:</h3>
+        <h3 style="margin-bottom: 1.5rem; font-size: 1.3rem; color: var(--dark);">📝 Example Support Inquiries:</h3>
         <div style="display: grid; gap: 1.25rem;">
             <div class="example-card" style="padding: 1.25rem; background: white; border-radius: 12px; cursor: pointer; border: 2px solid var(--border); transition: all 0.3s ease; box-shadow: var(--shadow-sm);" onclick="useExample(this)" onmouseover="this.style.borderColor='var(--primary)'; this.style.transform='translateY(-2px)'; this.style.boxShadow='var(--shadow-md)';" onmouseout="this.style.borderColor='var(--border)'; this.style.transform='translateY(0)'; this.style.boxShadow='var(--shadow-sm)';">
-                <div style="color: var(--text-light); font-weight: 500; margin-bottom: 0.5rem;">Credit Card / Billing Issue</div>
-                <div style="color: var(--text);">The bill amount of my credit card was debited twice. Please look into the matter and resolve at the earliest with a full refund.</div>
+                <div style="color: var(--text-light); font-weight: 500; margin-bottom: 0.5rem;">Hardware / Product Defect</div>
+                <div style="color: var(--text);">Laptop is overheating very badly and screen display is blank. Need warranty replacement or repair.</div>
             </div>
             <div class="example-card" style="padding: 1.25rem; background: white; border-radius: 12px; cursor: pointer; border: 2px solid var(--border); transition: all 0.3s ease; box-shadow: var(--shadow-sm);" onclick="useExample(this)" onmouseover="this.style.borderColor='var(--primary)'; this.style.transform='translateY(-2px)'; this.style.boxShadow='var(--shadow-md)';" onmouseout="this.style.borderColor='var(--border)'; this.style.transform='translateY(0)'; this.style.boxShadow='var(--shadow-sm)';">
-                <div style="color: var(--text-light); font-weight: 500; margin-bottom: 0.5rem;">Mortgage & Loan Docs</div>
-                <div style="color: var(--text);">I cannot get from Chase who services my mortgage, who owns it and who has original loan docs. Need payoff statement ASAP.</div>
+                <div style="color: var(--text-light); font-weight: 500; margin-bottom: 0.5rem;">Order & Delivery Delay</div>
+                <div style="color: var(--text);">Where is my order #ORD-84920? Delivery is delayed by 5 days and package tracking is not updating.</div>
             </div>
             <div class="example-card" style="padding: 1.25rem; background: white; border-radius: 12px; cursor: pointer; border: 2px solid var(--border); transition: all 0.3s ease; box-shadow: var(--shadow-sm);" onclick="useExample(this)" onmouseover="this.style.borderColor='var(--primary)'; this.style.transform='translateY(-2px)'; this.style.boxShadow='var(--shadow-md)';" onmouseout="this.style.borderColor='var(--border)'; this.style.transform='translateY(0)'; this.style.boxShadow='var(--shadow-sm)';">
-                <div style="color: var(--text-light); font-weight: 500; margin-bottom: 0.5rem;">Theft / Fraud Incident (High Priority)</div>
-                <div style="color: var(--text);">URGENT: Received a fraudulent email regarding renewal of services and noticed an unauthorized transaction of $500 on my account. Please freeze my card immediately.</div>
+                <div style="color: var(--text-light); font-weight: 500; margin-bottom: 0.5rem;">Damaged Product Return</div>
+                <div style="color: var(--text);">Received damaged item in order #ORD-77123. The package was torn and parts are missing. Please schedule reverse pickup.</div>
             </div>
             <div class="example-card" style="padding: 1.25rem; background: white; border-radius: 12px; cursor: pointer; border: 2px solid var(--border); transition: all 0.3s ease; box-shadow: var(--shadow-sm);" onclick="useExample(this)" onmouseover="this.style.borderColor='var(--primary)'; this.style.transform='translateY(-2px)'; this.style.boxShadow='var(--shadow-md)';" onmouseout="this.style.borderColor='var(--border)'; this.style.transform='translateY(0)'; this.style.boxShadow='var(--shadow-sm)';">
-                <div style="color: var(--text-light); font-weight: 500; margin-bottom: 0.5rem;">Bank Account Services</div>
-                <div style="color: var(--text);">I want to open a salary account at your downtown branch. Please provide me the procedure and checking deposit requirements.</div>
+                <div style="color: var(--text-light); font-weight: 500; margin-bottom: 0.5rem;">Refund Pending</div>
+                <div style="color: var(--text);">Refund of $149 for returned merchandise has not been credited to my bank account. Reference number REF-44109.</div>
             </div>
         </div>
     </div>

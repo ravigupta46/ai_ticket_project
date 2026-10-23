@@ -52,6 +52,52 @@
             </div>
         </div>
 
+        {% if entities and (entities.error_codes or entities.organizations or entities.amounts or entities.dates or entities.products) %}
+        <div class="preview-entities" style="background: linear-gradient(135deg, rgba(99, 102, 241, 0.05) 0%, rgba(99, 102, 241, 0.02) 100%); padding: 1.5rem; border-radius: 12px; border: 2px solid rgba(99, 102, 241, 0.1); margin-bottom: 1.75rem;">
+            <h3 style="margin-bottom: 1rem; color: var(--primary); font-weight: 700;">🔍 Extracted Information</h3>
+            {% if entities.error_codes %}
+            <div style="margin-bottom: 0.75rem;">
+                <strong style="color: var(--dark);">Order / Reference IDs:</strong>
+                <div style="margin-top: 0.25rem; display: flex; flex-wrap: wrap; gap: 0.5rem;">
+                    {% for code in entities.error_codes %}
+                    <span class="entity-tag" style="background: #dbeafe; color: #0369a1; padding: 0.3rem 0.6rem; border-radius: 20px; font-size: 0.85rem;">{{ code }}</span>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endif %}
+            {% if entities.products %}
+            <div style="margin-bottom: 0.75rem;">
+                <strong style="color: var(--dark);">Products:</strong>
+                <div style="margin-top: 0.25rem; display: flex; flex-wrap: wrap; gap: 0.5rem;">
+                    {% for prod in entities.products %}
+                    <span class="entity-tag" style="background: #dcfce7; color: #166534; padding: 0.3rem 0.6rem; border-radius: 20px; font-size: 0.85rem;">{{ prod }}</span>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endif %}
+            {% if entities.amounts %}
+            <div style="margin-bottom: 0.75rem;">
+                <strong style="color: var(--dark);">Amounts:</strong>
+                <div style="margin-top: 0.25rem; display: flex; flex-wrap: wrap; gap: 0.5rem;">
+                    {% for amt in entities.amounts %}
+                    <span class="entity-tag" style="background: #fef3c7; color: #92400e; padding: 0.3rem 0.6rem; border-radius: 20px; font-size: 0.85rem;">{{ amt }}</span>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endif %}
+            {% if entities.dates %}
+            <div>
+                <strong style="color: var(--dark);">Dates:</strong>
+                <div style="margin-top: 0.25rem; display: flex; flex-wrap: wrap; gap: 0.5rem;">
+                    {% for dt in entities.dates %}
+                    <span class="entity-tag" style="background: #f3e8ff; color: #6b21a8; padding: 0.3rem 0.6rem; border-radius: 20px; font-size: 0.85rem;">{{ dt }}</span>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endif %}
+        </div>
+        {% endif %}
+
         {% if session.get('role') == 'agent' %}
         <div class="preview-field" style="margin-bottom: 1.75rem;">
             <label style="font-weight: 600; color: var(--primary); font-size: 1rem; margin-bottom: 0.5rem;">🔄 Update Status</label>
@@ -86,6 +132,7 @@ function updateStatus(ticketId, newStatus) {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
+            'X-CSRFToken': '{{ csrf_token() }}'
         },
         body: JSON.stringify({ status: newStatus })
     })
