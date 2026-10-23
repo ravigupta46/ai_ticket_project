@@ -13,7 +13,7 @@ import json
 from datetime import timedelta
 import pytest
 from app import app
-from database import init_db, get_db, authenticate_user
+from database import init_db, get_db, authenticate_user, create_user
 
 
 @pytest.fixture
@@ -139,15 +139,8 @@ def test_user_flow_and_validation(client):
 
 def test_agent_status_update_with_csrf(client):
     """Test agent updating ticket status with CSRF token header."""
-    # Register and login agent
-    reg_page = client.get("/register")
-    reg_csrf = extract_csrf_token(reg_page.get_data(as_text=True))
-    client.post("/register", data={
-        "csrf_token": reg_csrf,
-        "username": "agent_smith_42",
-        "password": "agentPassword123!",
-        "role": "agent"
-    })
+    # Provision agent account via backend
+    create_user("agent_smith_42", "agentPassword123!", "agent")
 
     login_page = client.get("/login")
     login_csrf = extract_csrf_token(login_page.get_data(as_text=True))

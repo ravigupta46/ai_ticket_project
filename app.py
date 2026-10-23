@@ -88,7 +88,7 @@ def role_required(role):
                 return redirect(url_for("login"))
             if session.get("role") != role:
                 flash("Unauthorized access for your account role.", "error")
-                return redirect(url_for("user_dashboard" if session.get("role") == "user" else "agent_dashboard"))
+                return redirect(url_for("login"))
             return f(*args, **kwargs)
         return decorated
     return decorator
@@ -137,13 +137,12 @@ def register():
     if request.method == "POST":
         username = request.form.get("username", "").strip()
         password = request.form.get("password", "")
-        role = request.form.get("role", "")
 
-        if not username or not password or role not in ("user", "agent"):
-            flash("All fields are required and role must be valid!", "error")
+        if not username or len(password) < 8:
+            flash("Username is required and password must be at least 8 characters long.", "error")
             return render_template("register.html")
 
-        success, message = create_user(username, password, role)
+        success, message = create_user(username, password, "user")
         if success:
             flash(message, "success")
             return redirect(url_for("login"))
