@@ -2,6 +2,7 @@
 SQLite database interface for ResolvAI tickets and users.
 Features safe migrations, parameterized queries, and transparent password hash upgrades.
 """
+import os
 import sqlite3
 import json
 from datetime import datetime
@@ -10,16 +11,17 @@ from werkzeug.security import generate_password_hash, check_password_hash
 DB_NAME = "users.db"
 
 
-def get_db():
+def get_db(db_name=None):
     """Return database connection with Row factory."""
-    conn = sqlite3.connect(DB_NAME)
+    target = db_name or os.environ.get("DATABASE_PATH", DB_NAME)
+    conn = sqlite3.connect(target)
     conn.row_factory = sqlite3.Row
     return conn
 
 
-def init_db():
+def init_db(db_name=None):
     """Initialize tables and run non-destructive schema migrations."""
-    conn = get_db()
+    conn = get_db(db_name)
     c = conn.cursor()
 
     c.execute("""
@@ -27,7 +29,7 @@ def init_db():
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         username TEXT UNIQUE NOT NULL,
         password TEXT NOT NULL,
-        role TEXT NOT NULL,
+        role TEXT NOT NULL CHECK(role IN ('user', 'agent')),
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )
     """)
@@ -75,6 +77,9 @@ def init_db():
 
 def create_user(username, password, role):
     """Register a new user with hashed password."""
+    if role not in ("user", "agent"):
+        return False, "Invalid role"
+
     conn = get_db()
     c = conn.cursor()
     hashed = generate_password_hash(password)

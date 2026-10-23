@@ -51,7 +51,8 @@ All accuracy figures in the project are derived strictly from `model/output/metr
 ai_ticket_project/
 ├── app.py                     # Flask application (CSRF, sessions, validation, routes)
 ├── database.py                # SQLite persistence, migrations, password hashing
-├── reset_db.py                # Database reset and development account seeding
+├── create_agent.py            # CLI agent account provisioning utility
+├── reset_db.py                # Database reset utility
 ├── requirements.txt           # Minimal, clean runtime dependencies
 ├── build.sh                   # Deployment build script (spaCy download)
 ├── render.yaml                # Render cloud deployment specification
@@ -106,13 +107,15 @@ python model/topic_modelling_nmf.py
 python model/eda.py
 ```
 
-### 3. Initialize Database & Seed Development Users
+### 3. Initialize Database & Provision Agent
 ```bash
+# Initialize fresh database schema
 python reset_db.py
+
+# Provision an agent account via CLI
+python create_agent.py <username>
 ```
-*Development seed accounts:*
-- **User:** `demo_user` / `password123`
-- **Agent:** `demo_agent` / `password123`
+Agents are provisioned by an administrator via `python create_agent.py <username>`; public registration creates customer accounts only.
 
 ### 4. Run Web Application
 ```bash

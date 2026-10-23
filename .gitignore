@@ -60,7 +60,9 @@ model/*.joblib
 
 # SQLite DB
 *.db
+*.sqlite3
 users.db
+instance/
 
 # Scratch / temporary
 test.pdf
