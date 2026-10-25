@@ -1,5 +1,5 @@
 """ai_engine/ticket_generator.py
-Hybrid ticket triage engine: regex rules -> ML pipeline fallback -> entity extraction.
+Triage engine: ML classification for category, priority rules/model, and entity extraction.
 Maintains public API: generate_ticket(text) -> {title, description, category, priority, entities, ml_used}.
 """
 import os
@@ -9,7 +9,7 @@ import logging
 from typing import Dict, Any
 
 from ai_engine.config import ALLOWED_CATEGORIES, ALLOWED_PRIORITIES
-from ai_engine.rules import rule_based_category, rule_based_priority
+from ai_engine.rules import rule_based_priority
 
 logger = logging.getLogger(__name__)
 
@@ -44,7 +44,7 @@ CURRENCY_PATTERNS = [
 
 
 class AITicketGenerator:
-    """Singleton inference engine combining deterministic rules, ML pipelines, and NER."""
+    """Inference engine combining ML pipeline for categories, priority triage, and NER."""
     _instance = None
 
     def __new__(cls):
@@ -57,69 +57,32 @@ class AITicketGenerator:
         self.category_pipeline = None
         self.priority_pipeline = None
         self.nlp = None
-        self.models_loaded = False
         self._load_pipelines()
         self._load_spacy()
 
     def _load_pipelines(self):
-        """Load single-artifact sklearn Pipelines for category and priority."""
         cat_pipe_path = os.path.join(MODEL_DIR, 'category_pipeline.pkl')
         pri_pipe_path = os.path.join(MODEL_DIR, 'priority_pipeline.pkl')
 
-        # Load category pipeline
         if os.path.exists(cat_pipe_path):
             try:
                 with open(cat_pipe_path, 'rb') as f:
                     self.category_pipeline = pickle.load(f)
-                self.models_loaded = True
             except Exception as e:
                 logger.error("Failed loading category_pipeline.pkl: %s", e)
 
-        # Fallback to legacy separated artifacts if pipeline not found
-        if not self.category_pipeline:
-            legacy_model = os.path.join(MODEL_DIR, 'category_model.pkl')
-            legacy_vec = os.path.join(MODEL_DIR, 'vectorizer.pkl')
-            if os.path.exists(legacy_model) and os.path.exists(legacy_vec):
-                try:
-                    with open(legacy_model, 'rb') as fm, open(legacy_vec, 'rb') as fv:
-                        clf, vec = pickle.load(fm), pickle.load(fv)
-                    from sklearn.pipeline import Pipeline
-                    self.category_pipeline = Pipeline([('tfidf', vec), ('clf', clf)])
-                    self.models_loaded = True
-                except Exception as e:
-                    logger.warning("Failed loading legacy category model: %s", e)
-
-        # Load priority pipeline
         if os.path.exists(pri_pipe_path):
             try:
                 with open(pri_pipe_path, 'rb') as f:
                     self.priority_pipeline = pickle.load(f)
             except Exception as e:
                 logger.warning("Failed loading priority_pipeline.pkl: %s", e)
-        elif os.path.exists(os.path.join(MODEL_DIR, 'priority_model.pkl')):
-            try:
-                with open(os.path.join(MODEL_DIR, 'priority_model.pkl'), 'rb') as fm, \
-                     open(os.path.join(MODEL_DIR, 'priority_vectorizer.pkl'), 'rb') as fv:
-                    p_clf, p_vec = pickle.load(fm), pickle.load(fv)
-                from sklearn.pipeline import Pipeline
-                self.priority_pipeline = Pipeline([('tfidf', p_vec), ('clf', p_clf)])
-            except Exception as e:
-                logger.warning("Failed loading legacy priority model: %s", e)
-
-        if not self.models_loaded:
-            logger.info("ML category model not found on disk. Operating in rule-based fallback mode.")
 
     def _load_spacy(self):
-        """Load spaCy NER without invoking blocking downloads at runtime."""
         try:
             import spacy
             self.nlp = spacy.load("en_core_web_sm")
         except Exception:
-            logger.warning(
-                "spaCy model 'en_core_web_sm' is not installed. "
-                "Entity extraction will use regex-based fallback. "
-                "Run 'build.sh' or 'python -m spacy download en_core_web_sm' to enable full NER."
-            )
             self.nlp = None
 
     def extract_entities(self, text: str) -> Dict[str, list]:
@@ -134,11 +97,9 @@ class AITicketGenerator:
         if not text:
             return entities
 
-        # Product matching with compiled regex
         for match in PRODUCT_REGEX.finditer(text):
             entities['products'].append(match.group(0).capitalize())
 
-        # spaCy NER for dates, orgs, money
         if self.nlp:
             try:
                 doc = self.nlp(text)
@@ -154,7 +115,6 @@ class AITicketGenerator:
             except Exception as e:
                 logger.debug("spaCy extraction exception: %s", e)
 
-        # Regex for Order/Txn IDs and amounts
         for pattern in ORDER_PATTERNS:
             for m in pattern.findall(text):
                 entities['error_codes'].append(m if isinstance(m, str) else m[0])
@@ -178,11 +138,7 @@ class AITicketGenerator:
         return title if title.endswith(('.', '!', '?', '...')) else title + '...'
 
     def predict_category(self, text: str) -> str:
-        """Rule-first, ML fallback category triage."""
-        rule_cat = rule_based_category(text)
-        if rule_cat != 'Others':
-            return rule_cat
-
+        """ML category prediction using TF-IDF + Logistic Regression pipeline."""
         if self.category_pipeline is not None:
             try:
                 pred = self.category_pipeline.predict([text])[0]
@@ -190,8 +146,7 @@ class AITicketGenerator:
                     return pred
             except Exception as e:
                 logger.error("Category ML inference error: %s", e)
-
-        return rule_cat
+        return 'Others'
 
     def predict_priority(self, text: str) -> str:
         """Priority triage: rules first, ML fallback."""
@@ -223,13 +178,10 @@ class AITicketGenerator:
             }
 
         text_str = str(text).strip()
-        rule_cat = rule_based_category(text_str)
         category = self.predict_category(text_str)
         priority = self.predict_priority(text_str)
         entities = self.extract_entities(text_str)
-
-        # ml_used is True if the category had to fallback to ML and ML was loaded
-        ml_used = bool(rule_cat == 'Others' and self.category_pipeline is not None)
+        ml_used = bool(self.category_pipeline is not None)
 
         return {
             "title": self.generate_title(text_str),

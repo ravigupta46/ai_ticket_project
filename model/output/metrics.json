@@ -54,9 +54,14 @@
     "priority_model": {
         "model_type": "RandomForestClassifier",
         "evaluation_note": "weak-label (rule-derived), not human-verified",
-        "accuracy": 0.9481,
-        "weighted_f1": 0.9466,
-        "train_samples": 10785,
-        "test_samples": 2697
-    }
+        "accuracy": 0.9531,
+        "weighted_f1": 0.9525,
+        "train_samples": 13384,
+        "test_samples": 3347
+    },
+    "accuracy": 0.5471,
+    "precision": 0.5144,
+    "recall": 0.5471,
+    "f1_score": 0.4631,
+    "model": "TF-IDF + Logistic Regression"
 }

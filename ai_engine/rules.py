@@ -1,36 +1,32 @@
 """ai_engine/rules.py
-High-precision, deterministic regex rules for customer support classification and priority.
-Uses compiled word-boundary regexes from ai_engine.config.
+Urgency rules for support ticket priority detection.
 """
-from ai_engine.config import (
-    COMPILED_CATEGORY_RULES,
-    COMPILED_SYMPTOMS,
-    COMPILED_DEVICES,
-    COMPILED_PRIORITY_HIGH,
-    COMPILED_PRIORITY_MEDIUM,
-)
+import re
 
-def rule_based_category(text: str) -> str:
-    """Evaluate ordered category rules with word-boundary regex matching.
-    
-    Returns one of the 12 canonical categories or 'Others' when no specific rule matches.
-    Rule 12 (Product Queries) requires both a symptom/spec and a device keyword so it does
-    not swallow unrelated queries before reaching the ML classifier.
-    """
-    if not text:
-        return 'Others'
-    t = str(text).strip()
+PRIORITY_HIGH_KEYWORDS = [
+    'fire', 'smoke', 'shock', 'electric', 'electric shock', 'blast', 'exploded',
+    'burst', 'heating very badly', 'overheating badly', 'urgent', 'emergency',
+    'asap', 'critical', 'immediately', 'fraud', 'stolen', 'unauthorized',
+    'theft', 'skimming', 'consumer court', 'police', 'legal notice', 'lawsuit',
+    'penalty', 'abusive', 'harassment', 'double debited', 'money stolen'
+]
 
-    # Priority 1-11: Ordered domain rule table
-    for category, regex in COMPILED_CATEGORY_RULES:
-        if regex.search(t):
-            return category
+PRIORITY_MEDIUM_KEYWORDS = [
+    'not working', 'heating', 'display not visible', 'screen blank',
+    'flickering', 'broken', 'damaged', 'defective', 'wrong product',
+    'delayed', 'delay', 'refund pending', 'payment failed', 'money debited',
+    'missing item', 'missing', 'app crash', 'not delivered', 'problem',
+    'issue', 'difficulty', 'trouble', 'help', 'assist', 'slow', 'dispute', 'error'
+]
 
-    # Rule 12: Product Queries (requires symptom AND device co-occurrence)
-    if COMPILED_SYMPTOMS.search(t) and COMPILED_DEVICES.search(t):
-        return 'Product Queries'
+def _build_regex(keywords):
+    sorted_kw = sorted(keywords, key=len, reverse=True)
+    pattern = r'\b(?:' + '|'.join(re.escape(k) for k in sorted_kw) + r')\b'
+    return re.compile(pattern, re.IGNORECASE)
 
-    return 'Others'
+COMPILED_PRIORITY_HIGH = _build_regex(PRIORITY_HIGH_KEYWORDS)
+COMPILED_PRIORITY_MEDIUM = _build_regex(PRIORITY_MEDIUM_KEYWORDS)
+
 
 def rule_based_priority(text: str) -> str:
     """Evaluate priority using compiled urgency regexes."""

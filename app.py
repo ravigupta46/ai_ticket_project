@@ -100,7 +100,7 @@ def landing():
     cat_acc = None
     prio_acc = None
     if metrics:
-        cat_acc = metrics.get("category_model", {}).get("ml_only", {}).get("accuracy")
+        cat_acc = metrics.get("accuracy") or metrics.get("category_model", {}).get("ml_only", {}).get("accuracy")
         prio_acc = metrics.get("priority_model", {}).get("accuracy")
     return render_template(
         "landing.html",
@@ -160,7 +160,7 @@ def user_dashboard():
     classification_accuracy = None
     priority_accuracy = None
     if metrics:
-        cat_acc = metrics.get("category_model", {}).get("ml_only", {}).get("accuracy")
+        cat_acc = metrics.get("accuracy") or metrics.get("category_model", {}).get("ml_only", {}).get("accuracy")
         pri_acc = metrics.get("priority_model", {}).get("accuracy")
         if cat_acc is not None:
             classification_accuracy = round(cat_acc * 100, 2)
@@ -285,7 +285,7 @@ if __name__ == "__main__":
     cat_str = "not available"
     pri_str = "not available"
     if metrics:
-        cat_v = metrics.get("category_model", {}).get("ml_only", {}).get("accuracy")
+        cat_v = metrics.get("accuracy") or metrics.get("category_model", {}).get("ml_only", {}).get("accuracy")
         pri_v = metrics.get("priority_model", {}).get("accuracy")
         if cat_v is not None:
             cat_str = f"{cat_v * 100:.2f}%"
