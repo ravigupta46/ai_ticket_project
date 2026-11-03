@@ -1,46 +1,82 @@
 """model/eda.py
-Exploratory Data Analysis: text length stats and top n-grams on cleaned customer support data.
+Exploratory data analysis: generates 5 readable plots saved to EDA_DIR.
 """
 import os
+import tempfile
 import pandas as pd
-from sklearn.feature_extraction.text import CountVectorizer
 
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-CSV_PATH = os.path.join(BASE_DIR, "model", "output", "cleaned_customer_support_data.csv")
-if not os.path.exists(CSV_PATH):
-    CSV_PATH = os.path.join(BASE_DIR, "data", "new_Customer_support_data.csv")
+# Headless backend and safe temp cache
+os.environ['MPLCONFIGDIR'] = tempfile.gettempdir()
+import matplotlib
+matplotlib.use('Agg')
+import matplotlib.pyplot as plt
+import seaborn as sns
 
-df = pd.read_csv(CSV_PATH, encoding='latin1' if 'new_' in CSV_PATH else 'utf-8', low_memory=False)
-
-if 'text' in df.columns:
-    text_col = 'text'
-elif 'Customer Remarks' in df.columns:
-    text_col = 'Customer Remarks'
-else:
-    df['text'] = (df['subject'].fillna('') + ' ' + df['body'].fillna('')).str.strip()
-    text_col = 'text'
-
-df = df[df[text_col].notnull()].copy()
-df['text_len'] = df[text_col].astype(str).str.len()
-
-print(f"[EDA] Records: {len(df):,} | Length: Mean={df['text_len'].mean():.1f}, Min={df['text_len'].min()}, Max={df['text_len'].max()}")
-
-cat_col = 'category' if 'category' in df.columns else 'queue'
-if cat_col in df.columns:
-    print(f"\n[EDA] Category ({cat_col}) breakdown:\n", df[cat_col].value_counts())
-
-if 'priority' in df.columns:
-    print("\n[EDA] Priority breakdown:\n", df['priority'].value_counts())
+from model.config import EDA_DIR
 
 
-def top_ngrams(corpus, n=1, top_k=8):
-    vec = CountVectorizer(ngram_range=(n, n), stop_words='english').fit(corpus)
-    counts = vec.transform(corpus).sum(axis=0)
-    words = sorted([(w, counts[0, idx]) for w, idx in vec.vocabulary_.items()], key=lambda x: x[1], reverse=True)
-    return words[:top_k]
+def perform_eda(df: pd.DataFrame) -> None:
+    """Generate 5 PNG plots:
+       01_category_distribution.png
+       02_priority_distribution.png
+       03_text_length_distribution.png
+       04_length_by_priority.png
+       05_category_vs_priority.png
+    Save to EDA_DIR. Do not return anything."""
+    sns.set_theme(style="whitegrid", palette="muted")
+    df['text_char_len'] = df['text'].astype(str).str.len()
+    pri_order = ['Low', 'Medium', 'High']
+    pri_colors = {'Low': '#22c55e', 'Medium': '#f59e0b', 'High': '#ef4444'}
 
+    # 1. Category Distribution
+    plt.figure(figsize=(10, 5))
+    cat_order = df['category'].value_counts().index
+    sns.countplot(data=df, y='category', order=cat_order, hue='category', legend=False, palette='viridis')
+    plt.title("Ticket Category (Queue) Distribution", fontsize=13, fontweight='bold')
+    plt.xlabel("Ticket Count")
+    plt.ylabel("Category")
+    plt.tight_layout()
+    plt.savefig(os.path.join(EDA_DIR, "01_category_distribution.png"), dpi=200)
+    plt.close()
 
-corpus = df[text_col].dropna().astype(str).tolist()
-print("\n[EDA] Top 1-grams:", top_ngrams(corpus, n=1))
-print("[EDA] Top 2-grams:", top_ngrams(corpus, n=2))
-print("[EDA] Completed successfully.")
+    # 2. Priority Distribution
+    plt.figure(figsize=(7, 4.5))
+    sns.countplot(data=df, x='priority', order=pri_order, hue='priority', palette=pri_colors, legend=False)
+    plt.title("Ticket Priority Distribution", fontsize=13, fontweight='bold')
+    plt.xlabel("Priority Level")
+    plt.ylabel("Ticket Count")
+    plt.tight_layout()
+    plt.savefig(os.path.join(EDA_DIR, "02_priority_distribution.png"), dpi=200)
+    plt.close()
+
+    # 3. Text Length Distribution
+    plt.figure(figsize=(9, 4.5))
+    sns.histplot(df['text_char_len'], bins=40, kde=True, color='#3b82f6')
+    plt.title("Ticket Text Character Length Distribution", fontsize=13, fontweight='bold')
+    plt.xlabel("Character Length (Subject + Body)")
+    plt.ylabel("Frequency")
+    plt.tight_layout()
+    plt.savefig(os.path.join(EDA_DIR, "03_text_length_distribution.png"), dpi=200)
+    plt.close()
+
+    # 4. Text Length by Priority
+    plt.figure(figsize=(8, 4.5))
+    sns.boxplot(data=df, x='priority', y='text_char_len', order=pri_order, palette=pri_colors, showfliers=False)
+    plt.title("Text Length vs Priority Level", fontsize=13, fontweight='bold')
+    plt.xlabel("Priority")
+    plt.ylabel("Character Length")
+    plt.tight_layout()
+    plt.savefig(os.path.join(EDA_DIR, "04_length_by_priority.png"), dpi=200)
+    plt.close()
+
+    # 5. Category vs Priority Breakdown
+    plt.figure(figsize=(11, 6))
+    ct = pd.crosstab(df['category'], df['priority'], normalize='index')[pri_order] * 100
+    ct.plot(kind='barh', stacked=True, color=[pri_colors[p] for p in pri_order], figsize=(10, 6))
+    plt.title("Priority Breakdown across Ticket Categories (%)", fontsize=13, fontweight='bold')
+    plt.xlabel("Percentage (%)")
+    plt.ylabel("Category")
+    plt.legend(title="Priority", bbox_to_anchor=(1.02, 1), loc='upper left')
+    plt.tight_layout()
+    plt.savefig(os.path.join(EDA_DIR, "05_category_vs_priority.png"), dpi=200)
+    plt.close()
