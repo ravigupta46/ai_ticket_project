@@ -1,19 +1,19 @@
 """ai_engine/config.py
-Shared taxonomy configuration.
+Shared taxonomy configuration updated for new_Customer_support_data.
+Categories reflect ticket resolution queues, and Priorities reflect triage levels.
 """
 
 ALLOWED_CATEGORIES = [
-    'Product Queries',
-    'Returns',
-    'Order Related',
-    'Refund Related',
-    'Payments related',
-    'Cancellation',
-    'Shopzilla Related',
-    'Feedback',
-    'Offers & Cashback',
-    'App/website',
-    'Onboarding related',
+    'Billing and Payments',
+    'Customer Service',
+    'General Inquiry',
+    'Human Resources',
+    'IT Support',
+    'Product Support',
+    'Returns and Exchanges',
+    'Sales and Pre-Sales',
+    'Service Outages and Maintenance',
+    'Technical Support',
     'Others'
 ]
 

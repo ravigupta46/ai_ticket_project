@@ -16,7 +16,7 @@ def test_category_prediction():
     """Verify ML category prediction returns a valid allowed category."""
     ticket = generate_ticket("I need to return this damaged item and get an exchange")
     assert ticket["category"] in ALLOWED_CATEGORIES
-    assert ticket["category"] == "Returns"
+    assert ticket["category"] == "Returns and Exchanges"
 
 
 @pytest.mark.parametrize("query,expected_priority", [

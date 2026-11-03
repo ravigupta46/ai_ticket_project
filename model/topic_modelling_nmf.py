@@ -9,13 +9,19 @@ from sklearn.decomposition import NMF
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 MODEL_DIR = os.path.join(BASE_DIR, "model")
-CSV_PATH = os.path.join(MODEL_DIR, "output", "training_data.csv")
+CSV_PATH = os.path.join(MODEL_DIR, "output", "cleaned_customer_support_data.csv")
 if not os.path.exists(CSV_PATH):
-    CSV_PATH = os.path.join(BASE_DIR, "data", "Customer_support_data.csv")
+    CSV_PATH = os.path.join(BASE_DIR, "data", "new_Customer_support_data.csv")
 
-df = pd.read_csv(CSV_PATH, low_memory=False)
-text_col = 'text' if 'text' in df.columns else 'Customer Remarks'
-corpus = df[text_col].dropna().astype(str)
+df = pd.read_csv(CSV_PATH, encoding='latin1' if 'new_' in CSV_PATH else 'utf-8', low_memory=False)
+
+if 'text' in df.columns:
+    corpus = df['text'].dropna().astype(str)
+elif 'Customer Remarks' in df.columns:
+    corpus = df['Customer Remarks'].dropna().astype(str)
+else:
+    corpus = (df['subject'].fillna('') + ' ' + df['body'].fillna('')).str.strip()
+
 corpus = corpus[corpus.str.len() > 8].reset_index(drop=True)
 
 tfidf_vec = TfidfVectorizer(max_df=0.95, min_df=2, stop_words='english', max_features=10000)

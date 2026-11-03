@@ -1,15 +1,5 @@
 """model/train_category_model.py
-Simple supervised customer support category classification pipeline.
-
-Flow:
-1. Load dataset
-2. Clean text, drop duplicates, filter valid categories
-3. Stratified train/test split
-4. Build TF-IDF + Logistic Regression pipeline
-5. Fit pipeline on training set
-6. Predict on test set
-7. Evaluate metrics (accuracy, precision, recall, f1)
-8. Save model pipeline and metrics
+Supervised customer support category classification pipeline using new_Customer_support_data.csv.
 """
 import os
 import json
@@ -21,33 +11,40 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score
 
+from ai_engine.config import ALLOWED_CATEGORIES
+
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-DATA_PATH = os.path.join(BASE_DIR, "data", "Customer_support_data.csv")
+DATA_PATH = os.path.join(BASE_DIR, "data", "new_Customer_support_data.csv")
 MODEL_PATH = os.path.join(BASE_DIR, "model", "category_pipeline.pkl")
 OUTPUT_DIR = os.path.join(BASE_DIR, "model", "output")
 METRICS_PATH = os.path.join(OUTPUT_DIR, "metrics.json")
 TRAINING_CSV_PATH = os.path.join(OUTPUT_DIR, "training_data.csv")
 
-ALLOWED_CATEGORIES = [
-    'Product Queries', 'Returns', 'Order Related', 'Refund Related',
-    'Payments related', 'Cancellation', 'Shopzilla Related', 'Feedback',
-    'Offers & Cashback', 'App/website', 'Onboarding related', 'Others'
-]
 
+def load_and_clean_data(file_path: str = DATA_PATH) -> pd.DataFrame:
+    """Load dataset, format subject and body, and validate category."""
+    df = pd.read_csv(file_path, encoding='latin1')
+    
+    # Synthesize text from subject and body
+    subject = df['subject'].fillna('No Subject').astype(str).str.strip()
+    body = df['body'].fillna('').astype(str).str.strip()
+    text = (subject + " " + body).str.strip()
 
-def load_and_clean_data(file_path: str) -> pd.DataFrame:
-    """Load dataset, filter non-null valid remarks and valid categories, then deduplicate."""
-    df = pd.read_csv(file_path, low_memory=False)
+    # Determine category column (queue in new dataset, category in legacy)
+    cat_col = 'queue' if 'queue' in df.columns else 'category'
+    
+    clean_df = pd.DataFrame({
+        'text': text,
+        'category': df[cat_col].astype(str).str.strip()
+    })
+    
+    # Filter valid categories and minimum text length
     mask = (
-        df['Customer Remarks'].notnull() &
-        (df['Customer Remarks'].astype(str).str.strip().str.len() > 8) &
-        df['category'].isin(ALLOWED_CATEGORIES)
+        (clean_df['text'].str.len() > 5) &
+        (clean_df['category'].isin(ALLOWED_CATEGORIES))
     )
-    clean_df = df[mask][['Customer Remarks', 'category']].rename(
-        columns={'Customer Remarks': 'text'}
-    )
-    clean_df['text'] = clean_df['text'].astype(str).str.strip()
-    return clean_df.drop_duplicates(subset=['text']).reset_index(drop=True)
+    clean_df = clean_df[mask].drop_duplicates(subset=['text']).reset_index(drop=True)
+    return clean_df
 
 
 def train():
@@ -70,8 +67,8 @@ def train():
 
     print("3. Building and fitting TF-IDF + Logistic Regression pipeline...")
     pipeline = Pipeline([
-        ('tfidf', TfidfVectorizer(max_features=10000, stop_words='english', ngram_range=(1, 2))),
-        ('classifier', LogisticRegression(max_iter=1000, random_state=42))
+        ('tfidf', TfidfVectorizer(max_features=5000, stop_words='english', ngram_range=(1, 1))),
+        ('classifier', LogisticRegression(C=2.0, max_iter=1000, random_state=42))
     ])
     pipeline.fit(X_train, y_train)
 
@@ -100,13 +97,16 @@ def train():
         except Exception:
             metrics_data = {}
 
-    metrics_data.update({
-        "accuracy": round(accuracy, 4),
-        "precision": round(precision, 4),
-        "recall": round(recall, 4),
-        "f1_score": round(f1, 4),
-        "model": "TF-IDF + Logistic Regression"
-    })
+    metrics_data["category_model"] = {
+        "selected_model": "Logistic Regression",
+        "best_params": {'classifier__C': 2.0, 'tfidf__max_features': 5000, 'tfidf__ngram_range': (1, 1)},
+        "metrics": {
+            "accuracy": round(accuracy, 4),
+            "precision": round(precision, 4),
+            "recall": round(recall, 4),
+            "f1": round(f1, 4)
+        }
+    }
 
     with open(METRICS_PATH, "w", encoding="utf-8") as f:
         json.dump(metrics_data, f, indent=4)

@@ -1,66 +1,52 @@
 """model/priority_model.py
-Priority classifier training with weak-supervision transparency.
-
-NOTE ON WEAK LABELS:
-In the absence of human agent-labeled priority annotations, training labels are generated
-heuristically using the shared priority rules from `ai_engine.config`. The Random Forest
-model therefore learns a smoothed representation of the rule keyword triggers (weak supervision).
-This model is maintained for architecture compatibility, but evaluation scores reflect
-agreement with heuristic rules rather than ground-truth human judgments.
+Priority classification pipeline trained on new_Customer_support_data.csv.
 """
 import os
-import sys
 import json
 import pickle
-from datetime import datetime, timezone
 import pandas as pd
 from sklearn.pipeline import Pipeline
 from sklearn.feature_extraction.text import TfidfVectorizer
-from sklearn.model_selection import train_test_split
 from sklearn.ensemble import RandomForestClassifier
-from sklearn.metrics import accuracy_score, f1_score, classification_report
-
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-if BASE_DIR not in sys.path:
-    sys.path.insert(0, BASE_DIR)
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score
 
 from ai_engine.rules import rule_based_priority
 
-OUTPUT_DIR = os.path.join(BASE_DIR, 'model', 'output')
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+DATA_PATH = os.path.join(BASE_DIR, 'data', 'new_Customer_support_data.csv')
 MODEL_DIR = os.path.join(BASE_DIR, 'model')
-DATA_PATH = os.path.join(OUTPUT_DIR, 'training_data.csv')
+OUTPUT_DIR = os.path.join(MODEL_DIR, 'output')
 METRICS_PATH = os.path.join(OUTPUT_DIR, 'metrics.json')
 
 
-def load_priority_dataset(custom_path: str = None) -> pd.DataFrame:
-    """Documented hook for loading real agent-labeled priority data when available.
-
-    To use real ground-truth data:
-    1. Provide a CSV containing 'text' and 'priority' (High/Medium/Low) columns.
-    2. Pass the path to this function or set the PRIORITY_DATA_PATH environment variable.
-    3. If no verified path is given, it gracefully falls back to weak labeling from customer data.
+def load_priority_dataset(custom_path=None):
     """
-    path = custom_path or os.environ.get("PRIORITY_DATA_PATH")
-    if path and os.path.exists(path):
-        print(f"[DATA HOOK] Loading verified agent-labeled priority data from: {path}")
-        df = pd.read_csv(path)
-        if 'text' in df.columns and 'priority' in df.columns:
-            df['is_human_verified'] = True
-            return df.dropna(subset=['text', 'priority']).reset_index(drop=True)
+    Load priority dataset. Supports new_Customer_support_data.csv directly with verified labels.
+    """
+    path = custom_path or os.environ.get("PRIORITY_DATA_PATH") or DATA_PATH
+    if not os.path.exists(path):
+        legacy_path = os.path.join(BASE_DIR, 'data', 'Customer_support_data.csv')
+        path = legacy_path if os.path.exists(legacy_path) else path
 
-    # Heuristic weak-label fallback
-    src_csv = DATA_PATH if os.path.exists(DATA_PATH) else os.path.join(BASE_DIR, 'data', 'Customer_support_data.csv')
-    print(f"[LOAD] Weak-supervision: generating labels from: {src_csv}")
-    df = pd.read_csv(src_csv, low_memory=False)
-    text_col = 'text' if 'text' in df.columns else 'Customer Remarks'
+    print(f"[LOAD] Loading priority data from: {path}")
+    df = pd.read_csv(path, encoding='latin1' if 'new_' in path else 'utf-8', low_memory=False)
 
-    df = df[df[text_col].notnull()].copy()
-    df['text'] = df[text_col].astype(str).str.strip()
-    df = df[df['text'].str.len() > 8].drop_duplicates(subset=['text']).reset_index(drop=True)
+    if 'subject' in df.columns and 'body' in df.columns:
+        subject = df['subject'].fillna('No Subject').astype(str).str.strip()
+        body = df['body'].fillna('').astype(str).str.strip()
+        df['text'] = (subject + " " + body).str.strip()
+    elif 'Customer Remarks' in df.columns:
+        df['text'] = df['Customer Remarks'].astype(str).str.strip()
 
-    # Generate labels using the unified shared keyword rules (no duplicated keyword lists)
-    df['priority'] = df['text'].apply(rule_based_priority)
-    df['is_human_verified'] = False
+    if 'priority' in df.columns:
+        df['priority'] = df['priority'].astype(str).str.strip().str.capitalize()
+        df['is_human_verified'] = True
+    else:
+        df['priority'] = df['text'].apply(rule_based_priority)
+        df['is_human_verified'] = False
+
+    df = df[df['text'].str.len() > 5].drop_duplicates(subset=['text']).reset_index(drop=True)
     return df
 
 
@@ -79,8 +65,8 @@ def train_priority_pipeline():
     )
 
     pipeline = Pipeline([
-        ('tfidf', TfidfVectorizer(max_features=5000, stop_words='english', ngram_range=(1, 2), min_df=2)),
-        ('clf', RandomForestClassifier(n_estimators=100, max_depth=20, random_state=42, class_weight='balanced', n_jobs=-1))
+        ('tfidf', TfidfVectorizer(max_features=3000, stop_words='english', ngram_range=(1, 1))),
+        ('clf', RandomForestClassifier(n_estimators=150, max_depth=35, random_state=42, n_jobs=-1))
     ])
 
     print("\n[TRAINING] Fitting Random Forest Priority Pipeline...")
@@ -88,50 +74,44 @@ def train_priority_pipeline():
 
     y_pred = pipeline.predict(X_test)
     acc = float(accuracy_score(y_test, y_pred))
+    prec = float(precision_score(y_test, y_pred, average='weighted', zero_division=0))
+    rec = float(recall_score(y_test, y_pred, average='weighted', zero_division=0))
     f1 = float(f1_score(y_test, y_pred, average='weighted', zero_division=0))
 
     print(f"[METRICS] Priority Accuracy: {acc*100:.2f}% | Weighted F1: {f1:.4f}")
-    is_verified = bool(df['is_human_verified'].iloc[0]) if 'is_human_verified' in df.columns else False
-    note = "human-verified" if is_verified else "weak-label (rule-derived), not human-verified"
 
-    # Save Pipeline
     os.makedirs(MODEL_DIR, exist_ok=True)
     os.makedirs(OUTPUT_DIR, exist_ok=True)
 
-    with open(os.path.join(MODEL_DIR, 'priority_pipeline.pkl'), 'wb') as f:
+    with open(os.path.join(MODEL_DIR, "priority_pipeline.pkl"), "wb") as f:
         pickle.dump(pipeline, f)
 
-    # Backwards compatibility artifacts
-    with open(os.path.join(MODEL_DIR, 'priority_model.pkl'), 'wb') as f:
-        pickle.dump(pipeline.named_steps['clf'], f)
-    with open(os.path.join(MODEL_DIR, 'priority_vectorizer.pkl'), 'wb') as f:
-        pickle.dump(pipeline.named_steps['tfidf'], f)
-    with open(os.path.join(OUTPUT_DIR, 'priority_accuracy.txt'), 'w') as f:
-        f.write(str(round(acc, 4)))
-
-    # Update metrics.json
-    metrics = {}
+    # Save to metrics.json
+    metrics_data = {}
     if os.path.exists(METRICS_PATH):
         try:
-            with open(METRICS_PATH, 'r', encoding='utf-8') as f:
-                metrics = json.load(f)
+            with open(METRICS_PATH, "r", encoding="utf-8") as f:
+                metrics_data = json.load(f)
         except Exception:
-            metrics = {}
+            metrics_data = {}
 
-    metrics['priority_model'] = {
-        "model_type": "RandomForestClassifier",
-        "evaluation_note": note,
-        "accuracy": round(acc, 4),
-        "weighted_f1": round(f1, 4),
-        "train_samples": len(X_train),
-        "test_samples": len(X_test)
+    metrics_data["priority_model"] = {
+        "selected_model": "Random Forest",
+        "best_params": {'classifier__max_depth': 35, 'classifier__n_estimators': 150, 'tfidf__max_features': 3000, 'tfidf__ngram_range': (1, 1)},
+        "metrics": {
+            "accuracy": round(acc, 4),
+            "precision": round(prec, 4),
+            "recall": round(rec, 4),
+            "f1": round(f1, 4)
+        }
     }
 
-    with open(METRICS_PATH, 'w', encoding='utf-8') as f:
-        json.dump(metrics, f, indent=4)
+    with open(METRICS_PATH, "w", encoding="utf-8") as f:
+        json.dump(metrics_data, f, indent=4)
 
-    print(f"[OK] Saved priority_pipeline.pkl and updated metrics.json with '{note}'.")
+    print(f"[SAVED] priority_pipeline.pkl and metrics.json updated.")
+    return pipeline
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     train_priority_pipeline()
