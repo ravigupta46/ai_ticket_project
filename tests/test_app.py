@@ -111,7 +111,7 @@ def test_user_flow_and_validation(client):
         "csrf_token": confirm_csrf,
         "title": "Overheating Laptop",
         "description": description,
-        "category": "Product Queries",
+        "category": "Product Support",
         "priority": "High"
     }, follow_redirects=True)
     assert confirm_res.status_code == 200

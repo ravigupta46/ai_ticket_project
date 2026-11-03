@@ -100,8 +100,8 @@ def landing():
     cat_acc = None
     prio_acc = None
     if metrics:
-        cat_acc = metrics.get("accuracy") or metrics.get("category_model", {}).get("ml_only", {}).get("accuracy")
-        prio_acc = metrics.get("priority_model", {}).get("accuracy")
+        cat_acc = metrics.get("category_model", {}).get("metrics", {}).get("accuracy")
+        prio_acc = metrics.get("priority_model", {}).get("metrics", {}).get("accuracy")
     return render_template(
         "landing.html",
         current_year=datetime.now().year,
@@ -160,8 +160,8 @@ def user_dashboard():
     classification_accuracy = None
     priority_accuracy = None
     if metrics:
-        cat_acc = metrics.get("accuracy") or metrics.get("category_model", {}).get("ml_only", {}).get("accuracy")
-        pri_acc = metrics.get("priority_model", {}).get("accuracy")
+        cat_acc = metrics.get("category_model", {}).get("metrics", {}).get("accuracy")
+        pri_acc = metrics.get("priority_model", {}).get("metrics", {}).get("accuracy")
         if cat_acc is not None:
             classification_accuracy = round(cat_acc * 100, 2)
         if pri_acc is not None:
