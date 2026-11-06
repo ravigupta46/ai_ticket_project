@@ -46,23 +46,69 @@ def build_and_compare_category_models(X_train, X_test, y_train, y_test):
     return metrics_df
 
 
+
 def tune_category_model(X_train, y_train):
-    """GridSearchCV on LinearSVC with C in [0.5, 0.8, 1.0, 1.2].
-    Return best_estimator, best_params, best_score."""
-    pipe = Pipeline([
-        ('features', create_text_feature_union()),
-        ('classifier', LinearSVC(max_iter=3000, random_state=42))
-    ])
-    grid = GridSearchCV(
-        pipe,
-        param_grid={'classifier__C': [0.5, 0.8, 1.0, 1.2]},
-        cv=3,
-        scoring='f1_weighted',
-        n_jobs=-1
-    )
-    grid.fit(X_train, y_train)
-    print(f"Best Category Params: {grid.best_params_} (CV F1: {grid.best_score_:.4f})")
-    return grid.best_estimator_, grid.best_params_, grid.best_score_
+
+    models = [
+        (
+            "Multinomial Naive Bayes",
+            MultinomialNB(),
+            {
+                'classifier__alpha': [0.01, 0.1, 0.5, 1.0]
+            }
+        ),
+        (
+            "Logistic Regression",
+            LogisticRegression(max_iter=2000, random_state=42),
+            {
+                'classifier__C': [0.5, 1.0, 3.0, 5.0, 10.0]
+            }
+        ),
+        (
+            "Linear SVC",
+            LinearSVC(max_iter=3000, random_state=42),
+            {
+                'classifier__C': [0.5, 0.8, 1.0, 1.2]
+            }
+        )
+    ]
+
+    best_model = None
+    best_score = -1
+    best_params = None
+    best_name = None
+
+    for name, clf, params in models:
+
+        pipe = Pipeline([
+            ('features', create_text_feature_union()),
+            ('classifier', clf)
+        ])
+
+        grid = GridSearchCV(
+            pipe,
+            param_grid=params,
+            cv=3,
+            scoring='f1_weighted',
+            n_jobs=-1
+        )
+
+        grid.fit(X_train, y_train)
+
+        print(f"{name}: {grid.best_score_:.4f}")
+        print(f"Best Params: {grid.best_params_}")
+
+        if grid.best_score_ > best_score:
+            best_score = grid.best_score_
+            best_model = grid.best_estimator_
+            best_params = grid.best_params_
+            best_name = name
+
+    print(f"\nBest Category Model: {best_name}")
+    print(f"Best Weighted F1: {best_score:.4f}")
+
+    return best_model, best_params, best_score
+
 
 
 def train_category_pipeline(df=None, splits=None):
