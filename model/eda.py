@@ -24,7 +24,7 @@ def perform_eda(df: pd.DataFrame) -> None:
        05_category_vs_priority.png
     Save to EDA_DIR. Do not return anything."""
     sns.set_theme(style="whitegrid", palette="muted")
-    df['text_char_len'] = df['text'].astype(str).str.len()
+    df['text_char_len'] = df['text'].fillna('').astype(str).str.len()
     pri_order = ['Low', 'Medium', 'High']
     pri_colors = {'Low': '#22c55e', 'Medium': '#f59e0b', 'High': '#ef4444'}
 
