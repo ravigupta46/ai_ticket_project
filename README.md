@@ -36,6 +36,56 @@ ResolvAI employs a clean, pure-ML inference architecture:
 
 ---
 
+## 🤖 Automated Model Selection & ML Architecture
+
+ResolvAI does not hardcode static classifiers. Instead, it utilizes an automated tournament-style model selection pipeline that trains and benchmarks multiple candidate architectures across stratified splits, performs hyperparameter grid tuning with cross-validation, and dynamically selects and persists whichever model achieves the highest validation performance (`f1_weighted`).
+
+### 1. Feature Engineering: Multilingual Hybrid FeatureUnion
+Before model benchmarking, incoming raw text (`subject` + `body`) is converted into semantic and syntactic representations using a dual-branch `FeatureUnion`:
+* **Word n-grams (`ngram_range=(1, 3)`, max 30,000 features)**: Captures domain vocabulary, technical terminology, and phrase-level context.
+* **Character n-grams (`analyzer='char_wb'`, `ngram_range=(3, 5)`, max 15,000 features)**: Provides resilience against misspellings, user typos, formatting quirks, and out-of-vocabulary words.
+* **Sublinear TF Scaling (`sublinear_tf=True`)**: Dampens the effect of repetitive words by replacing TF with `1 + log(TF)`.
+
+---
+
+### 2. Candidate Model Evaluation & Dynamic Champion Selection
+
+For each task (Category triage and Priority assessment), the training pipeline evaluates three distinct candidate model families. Each model undergoes cross-validated hyperparameter search (`GridSearchCV(cv=3, scoring='f1_weighted')`). The training pipeline automatically compares cross-validation scores and selects the top-performing candidate as the champion pipeline for deployment.
+
+#### A. Category Classification Tournament
+For routing tickets across 11 departmental queues, the pipeline evaluates three models suited for multi-class, high-dimensional text feature spaces:
+
+| Candidate Model Family | Architecture Characteristics | Evaluated Hyperparameters | Selection Mechanism |
+|---|---|---|---|
+| **Multinomial Naive Bayes (`MultinomialNB`)** | Fast, probabilistic bag-of-words baseline | `classifier__alpha`: `[0.01, 0.1, 0.5, 1.0]` | Benchmark & cross-validate |
+| **Logistic Regression (`LogisticRegression`)** | Linear boundary with calibrated probabilities & L2 regularization | `classifier__C`: `[0.5, 1.0, 3.0, 5.0, 10.0]` | Benchmark & cross-validate |
+| **Linear Support Vector Classifier (`LinearSVC`)** | Large-margin boundary classifier optimized for sparse text representations | `classifier__C`: `[0.5, 0.8, 1.0, 1.2]` | Benchmark & cross-validate |
+
+* **Selection Strategy**: The training runner dynamically tracks the highest weighted F1 score across all three candidate grids and saves the winning estimator directly to `model/category_pipeline.pkl`. In benchmark evaluations, `LinearSVC` achieved the highest score and was automatically selected.
+
+#### B. Priority Classification Tournament
+For estimating ticket urgency (`High`, `Medium`, `Low`), the pipeline evaluates linear and ensemble tree-based models capable of capturing non-linear urgency cues:
+
+| Candidate Model Family | Architecture Characteristics | Evaluated Hyperparameters | Selection Mechanism |
+|---|---|---|---|
+| **Logistic Regression (`LogisticRegression`)** | Fast linear decision boundary across weighted features | `classifier__C`: `[0.5, 1.0, 3.0, 5.0]` | Benchmark & cross-validate |
+| **Random Forest (`RandomForestClassifier`)** | Bagged ensemble of decision trees with feature subsampling | `classifier__n_estimators`: `[100, 150, 200]`, `classifier__min_samples_split`: `[2, 4]` | Benchmark & cross-validate |
+| **Extra Trees Classifier (`ExtraTreesClassifier`)** | Extremely randomized decision trees minimizing split variance on sparse n-gram inputs | `classifier__n_estimators`: `[100, 150, 200]`, `classifier__min_samples_split`: `[2, 4]` | Benchmark & cross-validate |
+
+* **Selection Strategy**: The training engine automatically compares validation performance across the three candidates and selects the estimator with the highest weighted F1 score, saving it to `model/priority_pipeline.pkl`. In benchmark evaluations, `ExtraTreesClassifier` outperformed the others and was automatically selected.
+
+---
+
+### 3. Named Entity Recognition (NER)
+* **spaCy (`en_core_web_sm`)**: Selected for fast inference latency and low memory footprint in web request cycles.
+* **Extracted Entities**:
+  * Organizations & Systems (`ORG`)
+  * Monetary & Transaction Amounts (`MONEY`)
+  * Dates & Timelines (`DATE`)
+  * Custom regex extractors for ticket/order references and transaction IDs.
+
+---
+
 ## 📊 Evaluation Metrics (`model/output/metrics.json`)
 
 All accuracy and F1 figures are evaluated strictly on the human-labelled, held-out test set (800 tickets, stratified 80/20 split from `new_Customer_support_data.csv`):
